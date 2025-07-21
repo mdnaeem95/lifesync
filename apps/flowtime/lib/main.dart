@@ -6,7 +6,6 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
-import 'shared/data/database.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,18 +21,15 @@ Future<void> main() async {
     DeviceOrientation.portraitDown
   ]);
 
-  // Initialize database
-  final database = AppDatabase();
-
   runApp(
     ProviderScope(
       overrides: [
-        databaseProvider.overrideWithValue(database),
         sharedPreferencesProvider.overrideWithValue(sharedPreferences)
       ],
-      child: DevicePreview(builder: (context) {
-        return FlowTimeApp();
-      })
+      child: DevicePreview(
+        enabled: true,
+        builder: (context) => const FlowTimeApp(),
+      )
     )
   );
 }

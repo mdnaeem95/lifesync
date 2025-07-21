@@ -18,12 +18,10 @@ class AuthRepositoryImpl implements AuthRepository {
   User? _currentUser;
 
   AuthRepositoryImpl({
-    required IAuthRemoteDataSource remoteDataSource,
-    required IAuthLocalDataSource localDataSource,
+    required this.remoteDataSource,
+    required this.localDataSource,
     LocalAuthentication? localAuth,
-  }) : remoteDataSource = remoteDataSource,
-       localDataSource = localDataSource,
-       localAuth = localAuth ?? LocalAuthentication() {
+  }) : localAuth = localAuth ?? LocalAuthentication() {
     _initializeAuth();
   }
   
@@ -49,6 +47,9 @@ class AuthRepositoryImpl implements AuthRepository {
             await _clearAuthData();
           }
         }
+      } else {
+        // no cahced user, start with null
+        _authStateController.add(null);
       }
     } catch (e) {
       // Initialization failed, start with no user

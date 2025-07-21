@@ -111,5 +111,5 @@ LazyDatabase _openConnection() {
 }
 
 final databaseProvider = Provider<AppDatabase>((ref) {
-  throw UnimplementedError('Override in main()');
+  return AppDatabase();
 });

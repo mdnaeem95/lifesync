@@ -6,28 +6,12 @@ import '../../features/auth/presentation/screens/signin_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
-import 'dart:async';
-
-class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    notifyListeners();
-    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
-  }
-  late final StreamSubscription<dynamic> _subscription;
-  @override
-  void dispose() {
-    _subscription.cancel();
-    super.dispose();
-  }
-}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
-  final authNotifier = ref.watch(authNotifierProvider.notifier);
   
   return GoRouter(
     initialLocation: '/timeline',
-    refreshListenable: GoRouterRefreshStream(authNotifier.authStateChanges),
     redirect: (context, state) {
       final isAuthenticated = authState.value != null;
       final isAuthRoute = state.matchedLocation.startsWith('/auth');

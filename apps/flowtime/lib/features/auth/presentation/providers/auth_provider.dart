@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'dart:async';
 
 final dioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
@@ -80,13 +81,26 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     _init();
   }
 
-  // expose the raw stream
-  Stream<User?> get authStateChanges => authRepository.authStateChanges;
-  
-  void _init() {
-    authRepository.authStateChanges.listen((user) {
-      state = AsyncValue.data(user);
-    });
+  void _init() async {
+    try {
+      // First try to get the current user
+      final result = await authRepository.getCurrentUser();
+      result.fold(
+        (failure) => state = const AsyncValue.data(null),
+        (user) => state = AsyncValue.data(user),
+      );
+      
+      // // delay stream subscription to ensure repo is initialized
+      // Future.delayed(Duration.zero, () {
+      //   _authStateSubscription = authRepository.authStateChanges.listen((user) {
+      //   state = AsyncValue.data(user);
+      //   }, onError: (error) {
+      //     state = AsyncValue.error(error, StackTrace.current);
+      //   });
+      // });
+    } catch (e) {
+      state = const AsyncValue.data(null);
+    }
   }
   
   Future<void> signInWithEmail({
