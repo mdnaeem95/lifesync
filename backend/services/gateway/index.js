@@ -1,14 +1,21 @@
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const cors = require('cors');
 
 const app = express();
 
-// Enable CORS for Flutter app
-app.use(cors({
-  origin: ['http://localhost:*', 'http://127.0.0.1:*'],
-  credentials: true
-}));
+// Manual CORS middleware - more control
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -16,38 +23,33 @@ app.get('/health', (req, res) => {
 });
 
 // Auth service proxy
-app.use('/auth', createProxyMiddleware({
+const authProxy = createProxyMiddleware({
   target: process.env.AUTH_SERVICE_URL || 'http://auth-service:8080',
   changeOrigin: true,
-  onError: (err, req, res) => {
-    console.error('Auth proxy error:', err);
-    res.status(502).json({ error: 'Auth service unavailable' });
+  onProxyRes: function (proxyRes, req, res) {
+    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   }
-}));
+});
+
+app.use('/auth', authProxy);
 
 // FlowTime service proxy
-app.use('/api/flowtime', createProxyMiddleware({
+const flowtimeProxy = createProxyMiddleware({
   target: process.env.FLOWTIME_SERVICE_URL || 'http://flowtime-service:3000',
   changeOrigin: true,
   pathRewrite: {
     '^/api/flowtime': ''
   },
-  onError: (err, req, res) => {
-    console.error('FlowTime proxy error:', err);
-    res.status(502).json({ error: 'FlowTime service unavailable' });
+  onProxyRes: function (proxyRes, req, res) {
+    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   }
-}));
-
-// Error handling
-app.use((err, req, res, next) => {
-  console.error('Gateway error:', err);
-  res.status(500).json({ error: 'Internal gateway error' });
 });
+
+app.use('/api/flowtime', flowtimeProxy);
 
 // Start server
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`API Gateway listening on port ${PORT}`);
-  console.log(`Auth service: ${process.env.AUTH_SERVICE_URL || 'http://auth-service:8080'}`);
-  console.log(`FlowTime service: ${process.env.FLOWTIME_SERVICE_URL || 'http://flowtime-service:3000'}`);
+  console.log(`CORS enabled for all origins`);
 });
