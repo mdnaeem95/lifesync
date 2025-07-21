@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:device_preview/device_preview.dart';
 import 'app.dart';
 import 'shared/data/database.dart';
 
@@ -25,7 +26,9 @@ Future<void> main() async {
       overrides: [
         databaseProvider.overrideWithValue(database),
       ],
-      child: FlowTimeApp()
+      child: DevicePreview(builder: (context) {
+        return FlowTimeApp();
+      })
     )
   );
 }

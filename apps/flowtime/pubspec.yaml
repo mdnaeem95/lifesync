@@ -4,9 +4,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.1.0 <4.0.0'
+  sdk: '>=3.9.0-0 <4.0.0'
 
 dependencies:
+  device_preview: ^1.2.0
   flutter_riverpod: ^2.4.0
   flutter_timezone: ^4.1.1
   timezone: ^0.10.1
@@ -18,8 +19,8 @@ dependencies:
   drift: ^2.14.0
   path_provider: ^2.1.2
   path: ^1.8.3
-  sqlite3: ^2.4.0
-  sqlite3_flutter_libs: ^0.5.15
+  drift_sqflite: ^2.0.1
+  sqflite:      ^2.2.8
   drift_dev: ^2.14.0
   build_runner: ^2.4.6
   flutter_localizations:
