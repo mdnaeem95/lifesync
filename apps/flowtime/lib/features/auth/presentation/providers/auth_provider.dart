@@ -4,21 +4,42 @@ import '../../domain/usecases/sign_in_usecase.dart';
 import '../../domain/usecases/sign_up_usecase.dart';
 import '../../domain/usecases/sign_out_usecase.dart';
 import '../../domain/repositories/auth_repository.dart';
-import '../../data/repositories/auth_repository_impl.dart';import '../../data/datasources/auth_remote_data_source.dart';
+import '../../data/repositories/auth_repository_impl.dart';
+import '../../data/datasources/auth_remote_data_source.dart';
 import '../../data/datasources/auth_local_data_source.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
 
-final authRemoteDataSourceProvider = Provider<AuthRemoteDataSource>((ref) {
-  return AuthRemoteDataSource();
+final dioProvider = Provider<Dio>((ref) {
+  return Dio(BaseOptions(
+    baseUrl: 'http://localhost:8080', // TODO: Update with actual API URL
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 3),
+  ));
 });
 
-final authLocalDataSourceProvider = Provider<AuthLocalDataSource>((ref) {
-  return AuthLocalDataSource();
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError('Override in main()');
+});
+
+final authRemoteDataSourceProvider = Provider<IAuthRemoteDataSource>((ref) {
+  return AuthRemoteDataSource(dio: ref.watch(dioProvider));
+});
+
+final authLocalDataSourceProvider = Provider<IAuthLocalDataSource>((ref) {
+  return AuthLocalDataSource(
+    sharedPreferences: ref.watch(sharedPreferencesProvider),
+    secureStorage: const FlutterSecureStorage(),
+  );
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     remoteDataSource: ref.watch(authRemoteDataSourceProvider),
     localDataSource: ref.watch(authLocalDataSourceProvider),
+    localAuth: LocalAuthentication()
   );
 });
 
