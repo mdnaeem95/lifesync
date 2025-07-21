@@ -15,7 +15,7 @@ import 'dart:async';
 
 final dioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
-    baseUrl: 'http://localhost:8080', // TODO: Update with actual API URL
+    baseUrl: 'http://localhost:8000', // TODO: Update with actual API URL
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 3),
   ));

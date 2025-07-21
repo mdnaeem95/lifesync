@@ -8,18 +8,28 @@ import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final authNotifier = ref.watch(authNotifierProvider.notifier);
   
   return GoRouter(
     initialLocation: '/auth/signin',
-    refreshListenable: GoRouterRefreshStream(authState),
+    refreshListenable: GoRouterRefreshStream(ref),
     redirect: (context, state) {
-      final isLoading = authState.isLoading;
-      final isAuthenticated = authState.value != null;
-      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+      final authState = ref.read(authNotifierProvider);
       
-      // Don't redirect while loading
-      if (isLoading) return null;
+      // Handle loading state
+      if (authState.isLoading) {
+        return null; // Don't redirect while loading
+      }
+      
+      // Handle error state
+      if (authState.hasError) {
+        // Stay on current page if there's an error
+        return null;
+      }
+      
+      // Check authentication status
+      final isAuthenticated = authState.valueOrNull != null;
+      final isAuthRoute = state.matchedLocation.startsWith('/auth');
       
       // If not authenticated and not on auth route, go to signin
       if (!isAuthenticated && !isAuthRoute) {
@@ -50,10 +60,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/timeline',
         builder: (context, state) => const TimelineScreen(),
       ),
+      // Add a root redirect
+      GoRoute(
+        path: '/',
+        redirect: (context, state) => '/auth/signin',
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
-        child: Text('Error: ${state.error}'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Navigation Error',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.error?.toString() ?? 'Unknown error occurred',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => context.go('/auth/signin'),
+              child: const Text('Go to Sign In'),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -61,7 +97,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
 // Helper class to convert AsyncValue changes to Listenable
 class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(AsyncValue<dynamic> stream) {
-    notifyListeners();
+  final Ref ref;
+  
+  GoRouterRefreshStream(this.ref) {
+    // Listen to auth state changes
+    ref.listen(authNotifierProvider, (previous, next) {
+      // Notify listeners whenever auth state changes
+      notifyListeners();
+    });
   }
 }

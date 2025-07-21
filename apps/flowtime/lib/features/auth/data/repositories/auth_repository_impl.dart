@@ -38,9 +38,16 @@ class AuthRepositoryImpl implements AuthRepository {
         } else {
           // Try to refresh token
           try {
-            final newUser = await remoteDataSource.refreshToken(tokens.refreshToken);
-            await localDataSource.cacheUser(newUser);
-            _currentUser = newUser.toEntity();
+            final authResponse = await remoteDataSource.refreshToken(tokens.refreshToken);
+            await localDataSource.cacheUser(authResponse.user);
+            await localDataSource.saveTokens(
+              AuthTokenModel(
+                accessToken: authResponse.accessToken,
+                refreshToken: authResponse.refreshToken,
+                expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
+              ),
+            );
+            _currentUser = authResponse.user.toEntity();
             _authStateController.add(_currentUser);
           } catch (e) {
             // Refresh failed, clear everything
@@ -48,7 +55,7 @@ class AuthRepositoryImpl implements AuthRepository {
           }
         }
       } else {
-        // no cahced user, start with null
+        // No cached user, start with null
         _authStateController.add(null);
       }
     } catch (e) {
@@ -63,23 +70,22 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
   }) async {
     try {
-      final userModel = await remoteDataSource.signInWithEmail(
+      final authResponse = await remoteDataSource.signInWithEmail(
         email: email,
         password: password,
       );
       
       // Cache user and tokens
-      await localDataSource.cacheUser(userModel);
-      // In a real app, we'd get tokens from the response
+      await localDataSource.cacheUser(authResponse.user);
       await localDataSource.saveTokens(
         AuthTokenModel(
-          accessToken: 'mock_access_token',
-          refreshToken: 'mock_refresh_token',
-          expiresAt: DateTime.now().add(const Duration(hours: 1)),
+          accessToken: authResponse.accessToken,
+          refreshToken: authResponse.refreshToken,
+          expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
         ),
       );
       
-      _currentUser = userModel.toEntity();
+      _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
       
       return Right(_currentUser!);
@@ -99,23 +105,23 @@ class AuthRepositoryImpl implements AuthRepository {
     String? name,
   }) async {
     try {
-      final userModel = await remoteDataSource.signUpWithEmail(
+      final authResponse = await remoteDataSource.signUpWithEmail(
         email: email,
         password: password,
         name: name,
       );
       
       // Cache user and tokens
-      await localDataSource.cacheUser(userModel);
+      await localDataSource.cacheUser(authResponse.user);
       await localDataSource.saveTokens(
         AuthTokenModel(
-          accessToken: 'mock_access_token',
-          refreshToken: 'mock_refresh_token',
-          expiresAt: DateTime.now().add(const Duration(hours: 1)),
+          accessToken: authResponse.accessToken,
+          refreshToken: authResponse.refreshToken,
+          expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
         ),
       );
       
-      _currentUser = userModel.toEntity();
+      _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
       
       return Right(_currentUser!);
@@ -131,6 +137,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> signInWithGoogle() async {
     try {
+      // TODO: Implement proper Google sign-in with token handling
       final userModel = await remoteDataSource.signInWithGoogle();
       
       await localDataSource.cacheUser(userModel);
@@ -148,6 +155,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> signInWithApple() async {
     try {
+      // TODO: Implement proper Apple sign-in with token handling
       final userModel = await remoteDataSource.signInWithApple();
       
       await localDataSource.cacheUser(userModel);
@@ -165,40 +173,27 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, bool>> signInWithBiometric() async {
     try {
-      // Check if biometric is available
       final isAvailable = await localAuth.canCheckBiometrics;
       if (!isAvailable) {
         return Left(BiometricFailure('Biometric authentication not available'));
       }
       
-      // Check if biometric is enabled for this app
       final isEnabled = await localDataSource.isBiometricEnabled();
       if (!isEnabled) {
         return Left(BiometricFailure('Biometric authentication not enabled'));
       }
       
-      // Authenticate
-      final authenticated = await localAuth.authenticate(
-        localizedReason: 'Authenticate to access FlowTime',
+      final didAuthenticate = await localAuth.authenticate(
+        localizedReason: 'Please authenticate to sign in',
         options: const AuthenticationOptions(
-          biometricOnly: true,
           stickyAuth: true,
+          biometricOnly: true,
         ),
       );
       
-      if (authenticated) {
-        // Get cached user
-        final cachedUser = await localDataSource.getCachedUser();
-        if (cachedUser != null) {
-          _currentUser = cachedUser.toEntity();
-          _authStateController.add(_currentUser);
-          return const Right(true);
-        } else {
-          return Left(CacheFailure('No cached user found'));
-        }
-      } else {
-        return const Right(false);
-      }
+      return Right(didAuthenticate);
+    } on CacheException catch (e) {
+      return Left(CacheFailure(e.message));
     } catch (e) {
       return Left(BiometricFailure(e.toString()));
     }
@@ -208,13 +203,12 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Either<Failure, void>> signOut() async {
     try {
       await remoteDataSource.signOut();
-      await _clearAuthData();
-      return const Right(null);
     } catch (e) {
-      // Even if remote sign out fails, clear local data
-      await _clearAuthData();
-      return const Right(null);
+      // Continue with local signout even if remote fails
     }
+    
+    await _clearAuthData();
+    return const Right(null);
   }
 
   @override
@@ -224,10 +218,13 @@ class AuthRepositoryImpl implements AuthRepository {
         return Right(_currentUser!);
       }
       
-      final cachedUser = await localDataSource.getCachedUser();
-      if (cachedUser != null) {
-        _currentUser = cachedUser.toEntity();
-        return Right(_currentUser!);
+      final tokens = await localDataSource.getTokens();
+      if (tokens != null && !tokens.isExpired) {
+        final cachedUser = await localDataSource.getCachedUser();
+        if (cachedUser != null) {
+          _currentUser = cachedUser.toEntity();
+          return Right(_currentUser!);
+        }
       }
       
       return Left(CacheFailure('No user found'));
