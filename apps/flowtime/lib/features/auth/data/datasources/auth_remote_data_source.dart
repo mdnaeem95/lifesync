@@ -1,7 +1,15 @@
 import 'package:dio/dio.dart';
 import '../models/user_model.dart';
-import '../models/auth_token_model.dart';
 import '../../../../core/errors/exceptions.dart';
+
+abstract class IAuthRemoteDataSource {
+  Future<UserModel> signInWithEmail({required String email, required String password});
+  Future<UserModel> signUpWithEmail({required String email, required String password, String? name});
+  Future<UserModel> signInWithGoogle();
+  Future<UserModel> signInWithApple();
+  Future<void> signOut();
+  Future<UserModel> refreshToken(String refreshToken);
+}
 
 class AuthRemoteDataSource implements IAuthRemoteDataSource {
   final Dio dio;
@@ -32,14 +40,6 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
       
       if (response.statusCode == 200) {
-        // Save tokens
-        final tokens = AuthTokenModel(
-          accessToken: response.data['access_token'],
-          refreshToken: response.data['refresh_token'],
-          expiresAt: DateTime.now().add(Duration(seconds: response.data['expires_in'])),
-        );
-        
-        // Return user
         return UserModel.fromJson(response.data['user']);
       } else {
         throw ServerException('Invalid credentials');
@@ -74,13 +74,6 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
       
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Save tokens
-        final tokens = AuthTokenModel(
-          accessToken: response.data['access_token'],
-          refreshToken: response.data['refresh_token'],
-          expiresAt: DateTime.now().add(Duration(seconds: response.data['expires_in'])),
-        );
-        
         return UserModel.fromJson(response.data['user']);
       } else {
         throw ServerException('Failed to create account');
@@ -93,6 +86,69 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       }
     } catch (e) {
       throw ServerException('Unexpected error: $e');
+    }
+  }
+  
+  @override
+  Future<UserModel> signInWithGoogle() async {
+    try {
+      // TODO: Implement actual Google Sign-In flow
+      // For now, return mock data
+      await Future.delayed(const Duration(seconds: 2));
+      return UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        email: 'google.user@example.com',
+        name: 'Google User',
+        photoUrl: 'https://example.com/photo.jpg',
+        createdAt: DateTime.now(),
+      );
+    } catch (e) {
+      throw ServerException('Google sign in failed: $e');
+    }
+  }
+  
+  @override
+  Future<UserModel> signInWithApple() async {
+    try {
+      // TODO: Implement actual Apple Sign-In flow
+      // For now, return mock data
+      await Future.delayed(const Duration(seconds: 2));
+      return UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        email: 'apple.user@example.com',
+        name: 'Apple User',
+        createdAt: DateTime.now(),
+      );
+    } catch (e) {
+      throw ServerException('Apple sign in failed: $e');
+    }
+  }
+  
+  @override
+  Future<void> signOut() async {
+    try {
+      await dio.post('/auth/signout');
+    } catch (e) {
+      // Even if remote fails, we should clear local data
+      throw ServerException('Sign out failed: $e');
+    }
+  }
+  
+  @override
+  Future<UserModel> refreshToken(String refreshToken) async {
+    try {
+      final response = await dio.post(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken},
+      );
+      
+      if (response.statusCode == 200) {
+        return UserModel.fromJson(response.data['user']);
+      } else {
+        throw ServerException('Token refresh failed');
+      }
+    } catch (e) {
+      throw ServerException('Token refresh failed: $e');
     }
   }
 }
