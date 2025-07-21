@@ -11,15 +11,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
   
   return GoRouter(
-    initialLocation: '/timeline',
+    initialLocation: '/auth/signin',
+    refreshListenable: GoRouterRefreshStream(authState),
     redirect: (context, state) {
+      final isLoading = authState.isLoading;
       final isAuthenticated = authState.value != null;
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       
+      // Don't redirect while loading
+      if (isLoading) return null;
+      
+      // If not authenticated and not on auth route, go to signin
       if (!isAuthenticated && !isAuthRoute) {
         return '/auth/signin';
       }
       
+      // If authenticated and on auth route, go to timeline
       if (isAuthenticated && isAuthRoute) {
         return '/timeline';
       }
@@ -27,26 +34,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      ShellRoute(
-        builder: (context, state, child) => child,
-        routes: [
-          GoRoute(
-            path: '/auth/signin',
-            builder: (context, state) => const SignInScreen(),
-          ),
-          GoRoute(
-            path: '/auth/signup',
-            builder: (context, state) => const SignUpScreen(),
-          ),
-          GoRoute(
-            path: '/auth/onboarding',
-            builder: (context, state) => const OnboardingScreen(),
-          ),
-          GoRoute(
-            path: '/timeline',
-            builder: (context, state) => const TimelineScreen(),
-          ),
-        ],
+      GoRoute(
+        path: '/auth/signin',
+        builder: (context, state) => const SignInScreen(),
+      ),
+      GoRoute(
+        path: '/auth/signup',
+        builder: (context, state) => const SignUpScreen(),
+      ),
+      GoRoute(
+        path: '/auth/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/timeline',
+        builder: (context, state) => const TimelineScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
@@ -56,3 +58,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+// Helper class to convert AsyncValue changes to Listenable
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(AsyncValue<dynamic> stream) {
+    notifyListeners();
+  }
+}

@@ -71,6 +71,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final SignUpUseCase signUpUseCase;
   final SignOutUseCase signOutUseCase;
   final AuthRepository authRepository;
+  StreamSubscription<User?>? _authStateSubscription;
   
   AuthNotifier({
     required this.signInUseCase,
@@ -90,14 +91,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         (user) => state = AsyncValue.data(user),
       );
       
-      // // delay stream subscription to ensure repo is initialized
-      // Future.delayed(Duration.zero, () {
-      //   _authStateSubscription = authRepository.authStateChanges.listen((user) {
-      //   state = AsyncValue.data(user);
-      //   }, onError: (error) {
-      //     state = AsyncValue.error(error, StackTrace.current);
-      //   });
-      // });
+      // Listen to auth state changes
+      _authStateSubscription = authRepository.authStateChanges.listen((user) {
+        state = AsyncValue.data(user);
+      }, onError: (error) {
+        state = AsyncValue.error(error, StackTrace.current);
+      });
     } catch (e) {
       state = const AsyncValue.data(null);
     }
@@ -111,48 +110,47 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     final result = await signInUseCase(
       SignInParams(email: email, password: password),
     );
-    state = result.fold(
-      (failure) => AsyncValue.error(failure, StackTrace.current),
-      (user) => AsyncValue.data(user),
+    result.fold(
+      (failure) => state = AsyncValue.error(failure.message ?? 'Sign in failed', StackTrace.current),
+      (user) => state = AsyncValue.data(user),
     );
   }
   
   Future<void> signInWithGoogle() async {
     state = const AsyncValue.loading();
     final result = await authRepository.signInWithGoogle();
-    state = result.fold(
-      (failure) => AsyncValue.error(failure, StackTrace.current),
-      (user) => AsyncValue.data(user),
+    result.fold(
+      (failure) => state = AsyncValue.error(failure.message ?? 'Google sign in failed', StackTrace.current),
+      (user) => state = AsyncValue.data(user),
     );
   }
   
   Future<void> signInWithApple() async {
     state = const AsyncValue.loading();
     final result = await authRepository.signInWithApple();
-    state = result.fold(
-      (failure) => AsyncValue.error(failure, StackTrace.current),
-      (user) => AsyncValue.data(user),
+    result.fold(
+      (failure) => state = AsyncValue.error(failure.message ?? 'Apple sign in failed', StackTrace.current),
+      (user) => state = AsyncValue.data(user),
     );
   }
   
   Future<void> signInWithBiometric() async {
     state = const AsyncValue.loading();
     final result = await authRepository.signInWithBiometric();
-    if (result.isLeft()) {
-      final failure = result.fold((l) => l, (r) => null);
-      state = AsyncValue.error(failure ?? 'Unknown error', StackTrace.current);
-    } else {
-      final success = result.fold((l) => null, (r) => r);
-      if (success == true) {
-        final userResult = await authRepository.getCurrentUser();
-        state = userResult.fold(
-          (failure) => AsyncValue.error(failure, StackTrace.current),
-          (user) => AsyncValue.data(user),
-        );
-      } else {
-        state = const AsyncValue.data(null);
-      }
-    }
+    result.fold(
+      (failure) => state = AsyncValue.error(failure.message ?? 'Biometric sign in failed', StackTrace.current),
+      (r) async {
+        if (r == true) {
+          final userResult = await authRepository.getCurrentUser();
+          userResult.fold(
+            (failure) => state = AsyncValue.error(failure.message ?? 'Failed to get user', StackTrace.current),
+            (user) => state = AsyncValue.data(user),
+          );
+        } else {
+          state = const AsyncValue.data(null);
+        }
+      },
+    );
   }
   
   Future<void> signUpWithEmail({
@@ -164,14 +162,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     final result = await signUpUseCase(
       SignUpParams(email: email, password: password, name: name),
     );
-    state = result.fold(
-      (failure) => AsyncValue.error(failure, StackTrace.current),
-      (user) => AsyncValue.data(user),
+    result.fold(
+      (failure) => state = AsyncValue.error(failure.message ?? 'Sign up failed', StackTrace.current),
+      (user) => state = AsyncValue.data(user),
     );
   }
   
   Future<void> signOut() async {
     await signOutUseCase();
     state = const AsyncValue.data(null);
+  }
+  
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }
