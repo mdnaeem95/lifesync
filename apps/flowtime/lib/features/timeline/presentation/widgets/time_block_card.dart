@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/time_block.dart';
 import '../../domain/entities/task.dart';
@@ -33,11 +32,11 @@ class TimeBlockCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.1),
+          color: Colors.grey.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: Colors.grey.withOpacity(0.2),
-            style: BorderStyle.dotted,
+            color: Colors.grey.withValues(alpha: 0.2),
+            style: BorderStyle.solid,
           ),
         ),
         child: Center(
@@ -65,8 +64,8 @@ class TimeBlockCard extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              color.withOpacity(0.8),
-              color.withOpacity(0.6),
+              color.withValues(alpha: 0.8),
+              color.withValues(alpha: 0.6),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -78,7 +77,7 @@ class TimeBlockCard extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -113,7 +112,7 @@ class TimeBlockCard extends StatelessWidget {
                         Icon(
                           Icons.swap_vert,
                           size: 16,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                     ],
                   ),
@@ -125,7 +124,7 @@ class TimeBlockCard extends StatelessWidget {
                       task.description!,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -144,14 +143,14 @@ class TimeBlockCard extends StatelessWidget {
                           Icon(
                             Icons.access_time,
                             size: 12,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             _formatDuration(task.duration),
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -167,7 +166,7 @@ class TimeBlockCard extends StatelessWidget {
                                   ? Icons.bolt
                                   : Icons.bolt_outlined,
                               size: 10,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -184,7 +183,7 @@ class TimeBlockCard extends StatelessWidget {
                       child: ElevatedButton(
                         onPressed: onComplete,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.2),
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           shape: RoundedRectangleBorder(
@@ -213,7 +212,7 @@ class TimeBlockCard extends StatelessWidget {
         return AppColors.primary;
       case TaskType.meeting:
         return AppColors.secondary;
-      case TaskType.break:
+      case TaskType.breakTask:
         return AppColors.energyHigh;
       case TaskType.admin:
         return AppColors.warning;

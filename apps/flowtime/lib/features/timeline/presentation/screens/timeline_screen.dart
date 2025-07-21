@@ -8,6 +8,8 @@ import '../widgets/timeline_header.dart';
 import '../widgets/energy_indicator.dart';
 import '../widgets/timeline_view.dart';
 import '../widgets/floating_add_button.dart';
+import '../../domain/entities/task.dart';
+import '../../domain/entities/time_block.dart';
 
 class TimelineScreen extends ConsumerStatefulWidget {
   const TimelineScreen({super.key});
@@ -135,7 +137,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         color: AppColors.surfaceDark,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),

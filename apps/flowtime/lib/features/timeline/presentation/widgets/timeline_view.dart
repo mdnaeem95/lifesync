@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/time_block.dart';
 import '../../domain/entities/task.dart';
 import 'time_block_card.dart';
@@ -73,7 +72,7 @@ class TimelineView extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
             width: 0.5,
           ),
         ),
