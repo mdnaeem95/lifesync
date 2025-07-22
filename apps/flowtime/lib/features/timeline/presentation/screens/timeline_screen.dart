@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/timeline_provider.dart';
 import '../providers/energy_provider.dart';
@@ -22,6 +23,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   late AnimationController _fabAnimationController;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -137,7 +139,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         color: AppColors.surfaceDark,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
@@ -147,7 +149,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        currentIndex: 0,
+        currentIndex: _currentIndex,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
         items: const [
@@ -167,18 +169,36 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             icon: Icon(Icons.insights),
             label: 'Insights',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_circle),
+            label: 'Account',
+          ),
         ],
         onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+          
           // Navigate to different screens
           switch (index) {
+            case 0:
+              // Already on timeline
+              break;
             case 1:
               // Navigate to Energy Dashboard
+              context.go('/energy');
               break;
             case 2:
               // Navigate to Focus Mode
+              context.go('/focus');
               break;
             case 3:
               // Navigate to Analytics
+              context.go('/insights');
+              break;
+            case 4:
+              // Navigate to Account/Profile
+              context.go('/account');
               break;
           }
         },

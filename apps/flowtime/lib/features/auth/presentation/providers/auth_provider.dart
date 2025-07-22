@@ -15,9 +15,15 @@ import 'dart:async';
 
 final dioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
-    baseUrl: 'http://localhost:8000', // TODO: Update with actual API URL
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 3),
+    baseUrl: 'http://localhost:8000', // Fixed: API Gateway URL
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 10),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    validateStatus: (status) {
+      return status! < 500; // Don't throw for client errors
+    },
   ));
 });
 
