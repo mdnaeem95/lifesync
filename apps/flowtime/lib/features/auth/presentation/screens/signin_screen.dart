@@ -32,7 +32,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   Future<void> _signIn() async {
     if (_formKey.currentState!.validate()) {
       await ref.read(authNotifierProvider.notifier).signInWithEmail(
-        email: _emailController.text,
+        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
     }
@@ -42,11 +42,29 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     
+    // Handle error states
+    ref.listen<AsyncValue<dynamic>>(authNotifierProvider, (previous, next) {
+      if (next.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error.toString()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      // Handle successful sign in
+      if (next.hasValue && next.value != null) {
+        // Navigation is handled by router
+      }
+    });
+    
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,8 +97,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Sign in to continue to FlowTime',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
                         ),
                       ).animate().fadeIn(delay: 200.ms),
                     ],
@@ -128,22 +146,27 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
                     }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
                     return null;
                   },
                 ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.1),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
                 
-                // Forgot Password
+                // Forgot Password Link
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {
                       // TODO: Implement forgot password
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Forgot password feature coming soon'),
+                        ),
+                      );
                     },
-                    child: const Text('Forgot Password?'),
+                    child: Text(
+                      'Forgot Password?',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
                   ),
                 ).animate().fadeIn(delay: 500.ms),
                 const SizedBox(height: 24),
@@ -151,7 +174,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 // Sign In Button
                 AppButton(
                   text: 'Sign In',
-                  onPressed: _signIn,
+                  onPressed: authState.isLoading ? null : _signIn,
                   isLoading: authState.isLoading,
                 ).animate().fadeIn(delay: 600.ms).scale(),
                 const SizedBox(height: 24),
@@ -178,7 +201,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     SocialLoginButton(
                       text: 'Continue with Google',
                       icon: 'assets/icons/google.svg',
-                      onPressed: () {
+                      onPressed: authState.isLoading ? null : () {
                         ref.read(authNotifierProvider.notifier).signInWithGoogle();
                       },
                     ).animate().fadeIn(delay: 800.ms).slideY(begin: 0.1),
@@ -186,13 +209,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     SocialLoginButton(
                       text: 'Continue with Apple',
                       icon: 'assets/icons/apple.svg',
-                      onPressed: () {
+                      onPressed: authState.isLoading ? null : () {
                         ref.read(authNotifierProvider.notifier).signInWithApple();
                       },
                     ).animate().fadeIn(delay: 900.ms).slideY(begin: 0.1),
                     const SizedBox(height: 12),
                     BiometricButton(
-                      onPressed: () {
+                      onPressed: authState.isLoading ? () {} : () {
                         ref.read(authNotifierProvider.notifier).signInWithBiometric();
                       },
                     ).animate().fadeIn(delay: 1000.ms).slideY(begin: 0.1),
@@ -221,6 +244,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

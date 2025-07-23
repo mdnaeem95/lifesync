@@ -6,10 +6,9 @@ import '../../features/auth/presentation/screens/signin_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
+import '../../features/account/presentation/screens/account_screen.dart';
 
-final appRouterProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ref.watch(authNotifierProvider.notifier);
-  
+final appRouterProvider = Provider<GoRouter>((ref) { 
   return GoRouter(
     initialLocation: '/auth/signin',
     refreshListenable: GoRouterRefreshStream(ref),
@@ -59,6 +58,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/timeline',
         builder: (context, state) => const TimelineScreen(),
+      ),
+      GoRoute(
+        path: '/account',
+        builder: (context, state) => const AccountScreen(),
+      ),
+      GoRoute(
+        path: '/energy',
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Energy Dashboard')),
+          body: const Center(child: Text('Energy Dashboard - Coming Soon')),
+        ),
+      ),
+      GoRoute(
+        path: '/focus',
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Focus Mode')),
+          body: const Center(child: Text('Focus Mode - Coming Soon')),
+        ),
+      ),
+      GoRoute(
+        path: '/insights',
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Insights')),
+          body: const Center(child: Text('Insights - Coming Soon')),
+        ),
       ),
       // Add a root redirect
       GoRoute(

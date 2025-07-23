@@ -24,8 +24,8 @@ type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
-	PhotoURL  string    `json:"photo_url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	PhotoURL  string    `json:"photoUrl,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type SignUpRequest struct {

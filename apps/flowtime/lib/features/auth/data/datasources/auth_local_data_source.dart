@@ -29,10 +29,9 @@ class AuthLocalDataSource implements IAuthLocalDataSource {
   static const String biometricEnabledKey = 'BIOMETRIC_ENABLED';
   
   AuthLocalDataSource({
-    required SharedPreferences sharedPreferences,
+    required this.sharedPreferences,
     FlutterSecureStorage? secureStorage,
-  }) : sharedPreferences = sharedPreferences,
-       secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : secureStorage = secureStorage ?? const FlutterSecureStorage();
   
   @override
   Future<void> cacheUser(UserModel user) async {

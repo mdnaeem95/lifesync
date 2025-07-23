@@ -137,13 +137,24 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> signInWithGoogle() async {
     try {
-      // TODO: Implement proper Google sign-in with token handling
-      final userModel = await remoteDataSource.signInWithGoogle();
-      
-      await localDataSource.cacheUser(userModel);
-      _currentUser = userModel.toEntity();
+      // Now returns AuthResponse (contains tokens + user)
+      final authResponse = await remoteDataSource.signInWithGoogle();
+
+      // Cache the user object only
+      await localDataSource.cacheUser(authResponse.user);
+
+      // Optionally cache tokens if you want:
+      // await localDataSource.saveTokens(
+      //   AuthTokenModel(
+      //     accessToken: authResponse.accessToken,
+      //     refreshToken: authResponse.refreshToken,
+      //     expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
+      //   ),
+      // );
+
+      _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
-      
+
       return Right(_currentUser!);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

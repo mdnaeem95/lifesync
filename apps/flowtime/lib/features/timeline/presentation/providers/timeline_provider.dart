@@ -13,15 +13,10 @@ final timelineProvider = StateNotifierProvider<TimelineNotifier, AsyncValue<List
 });
 
 class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
-  final Ref _ref;
-  DateTime _currentDate = DateTime.now();
-
-  TimelineNotifier(this._ref) : super(const AsyncValue.loading());
+  TimelineNotifier(Ref ref) : super(const AsyncValue.loading());
 
   Future<void> loadTasksForDate(DateTime date) async {
-    state = const AsyncValue.loading();
-    _currentDate = date;
-    
+    state = const AsyncValue.loading();    
     try {
       // Fetch tasks from repository
       final tasks = await _fetchTasksForDate(date);

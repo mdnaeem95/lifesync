@@ -4,7 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 class SocialLoginButton extends StatelessWidget {
   final String text;
   final String icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const SocialLoginButton({
     super.key,

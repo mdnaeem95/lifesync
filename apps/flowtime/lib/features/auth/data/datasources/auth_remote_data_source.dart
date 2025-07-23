@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../../../../core/errors/exceptions.dart';
 
@@ -29,7 +30,7 @@ class AuthResponse {
 abstract class IAuthRemoteDataSource {
   Future<AuthResponse> signInWithEmail({required String email, required String password});
   Future<AuthResponse> signUpWithEmail({required String email, required String password, String? name});
-  Future<UserModel> signInWithGoogle();
+  Future<AuthResponse> signInWithGoogle();
   Future<UserModel> signInWithApple();
   Future<void> signOut();
   Future<AuthResponse> refreshToken(String refreshToken);
@@ -114,23 +115,44 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
   }
   
   @override
-  Future<UserModel> signInWithGoogle() async {
+  Future<AuthResponse> signInWithGoogle() async {
     try {
-      // TODO: Implement actual Google Sign-In flow
-      // For now, return mock data
-      await Future.delayed(const Duration(seconds: 2));
-      return UserModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        email: 'google.user@example.com',
-        name: 'Google User',
-        photoUrl: 'https://example.com/photo.jpg',
-        createdAt: DateTime.now(),
+      final googleSignIn = GoogleSignIn.instance;
+
+      // Optional: initialize (only needed if you need custom client IDs)
+      // await googleSignIn.initialize();
+
+      // Step 1: Start Google Sign-In flow
+      final account = await googleSignIn.authenticate();
+
+      // Step 2: Get ID token
+      final auth = account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) {
+        throw ServerException('Google sign-in failed: No ID token returned');
+      }
+
+      // Step 3: Send ID token to backend
+      final response = await dio.post(
+        '/auth/google',
+        data: {'id_token': idToken},
+        options: Options(
+          headers: {'Content-Type': 'application/json'},
+        ),
       );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return AuthResponse.fromJson(response.data);
+      } else {
+        throw ServerException('Google sign-in failed: Backend error');
+      }
+    } on DioException catch (e) {
+      throw ServerException('Google sign-in network error: ${e.message}');
     } catch (e) {
-      throw ServerException('Google sign in failed: $e');
+      throw ServerException('Google sign-in failed: $e');
     }
   }
-  
+    
   @override
   Future<UserModel> signInWithApple() async {
     try {
