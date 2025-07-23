@@ -166,13 +166,21 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> signInWithApple() async {
     try {
-      // TODO: Implement proper Apple sign-in with token handling
-      final userModel = await remoteDataSource.signInWithApple();
-      
-      await localDataSource.cacheUser(userModel);
-      _currentUser = userModel.toEntity();
+      final authResponse = await remoteDataSource.signInWithApple();
+
+      await localDataSource.cacheUser(authResponse.user);
+      // Optionally cache tokens
+      // await localDataSource.saveTokens(
+      //   AuthTokenModel(
+      //     accessToken: authResponse.accessToken,
+      //     refreshToken: authResponse.refreshToken,
+      //     expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
+      //   ),
+      // );
+
+      _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
-      
+
       return Right(_currentUser!);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

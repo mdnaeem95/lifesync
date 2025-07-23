@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../../../../core/errors/exceptions.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 // Response model for auth endpoints
 class AuthResponse {
@@ -31,7 +32,7 @@ abstract class IAuthRemoteDataSource {
   Future<AuthResponse> signInWithEmail({required String email, required String password});
   Future<AuthResponse> signUpWithEmail({required String email, required String password, String? name});
   Future<AuthResponse> signInWithGoogle();
-  Future<UserModel> signInWithApple();
+  Future<AuthResponse> signInWithApple();
   Future<void> signOut();
   Future<AuthResponse> refreshToken(String refreshToken);
 }
@@ -152,24 +153,40 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       throw ServerException('Google sign-in failed: $e');
     }
   }
-    
+
   @override
-  Future<UserModel> signInWithApple() async {
+  Future<AuthResponse> signInWithApple() async {
     try {
-      // TODO: Implement actual Apple Sign-In flow
-      // For now, return mock data
-      await Future.delayed(const Duration(seconds: 2));
-      return UserModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        email: 'apple.user@example.com',
-        name: 'Apple User',
-        createdAt: DateTime.now(),
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
       );
+
+      // Send credential.identityToken to your backend for verification/login
+      final idToken = credential.identityToken;
+
+      if (idToken == null) {
+        throw ServerException('Apple sign in failed: No identity token returned');
+      }
+
+      final response = await dio.post(
+        '/auth/apple', // or your backend endpoint
+        data: {'id_token': idToken},
+        options: Options(headers: {'Content-Type': 'application/json'}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return AuthResponse.fromJson(response.data);
+      } else {
+        throw ServerException('Apple sign in failed: Backend error');
+      }
     } catch (e) {
       throw ServerException('Apple sign in failed: $e');
     }
   }
-  
+    
   @override
   Future<void> signOut() async {
     try {
