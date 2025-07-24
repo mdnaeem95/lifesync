@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/constants/app_colors.dart';
 
 class CurrentTimeIndicator extends StatefulWidget {
@@ -21,7 +22,7 @@ class _CurrentTimeIndicatorState extends State<CurrentTimeIndicator> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       setState(() {
         _currentTime = DateTime.now();
       });
@@ -34,35 +35,29 @@ class _CurrentTimeIndicatorState extends State<CurrentTimeIndicator> {
     super.dispose();
   }
 
-  double get _topOffset {
-    final hoursSinceMidnight = _currentTime.hour + (_currentTime.minute / 60);
-    return 40 + (hoursSinceMidnight * 120); // 40px top padding + 120px per hour
-  }
-
   @override
   Widget build(BuildContext context) {
+    final hourProgress = _currentTime.hour + (_currentTime.minute / 60);
+    final topOffset = 40 + (hourProgress * 80); // 80px per hour
+
     return Positioned(
-      top: _topOffset,
+      top: topOffset,
       left: 0,
       right: 0,
       child: Row(
         children: [
-          // Time label
           Container(
             width: 60,
-            padding: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              '${_currentTime.hour.toString().padLeft(2, '0')}:${_currentTime.minute.toString().padLeft(2, '0')}',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
+              _formatTime(_currentTime),
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary,
               ),
             ),
           ),
-          
-          // Line
           Expanded(
             child: Container(
               height: 2,
@@ -78,15 +73,12 @@ class _CurrentTimeIndicatorState extends State<CurrentTimeIndicator> {
               ),
             ),
           ),
-          
-          // Dot at the end
           Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 16),
+            width: 12,
+            height: 12,
             decoration: BoxDecoration(
-              color: AppColors.primary,
               shape: BoxShape.circle,
+              color: AppColors.primary,
               boxShadow: [
                 BoxShadow(
                   color: AppColors.primary.withValues(alpha: 0.5),
@@ -95,9 +87,27 @@ class _CurrentTimeIndicatorState extends State<CurrentTimeIndicator> {
                 ),
               ],
             ),
-          ),
+          ).animate(onPlay: (controller) => controller.repeat())
+              .scale(
+                begin: const Offset(1, 1),
+                end: const Offset(1.2, 1.2),
+                duration: 1000.ms,
+              )
+              .then()
+              .scale(
+                begin: const Offset(1.2, 1.2),
+                end: const Offset(1, 1),
+                duration: 1000.ms,
+              ),
+          const SizedBox(width: 16),
         ],
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }

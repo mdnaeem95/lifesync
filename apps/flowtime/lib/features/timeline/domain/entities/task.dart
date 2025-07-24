@@ -17,6 +17,7 @@ class Task extends Equatable {
   final bool isFlexible; // Can be rescheduled
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? completedAt;
   final Map<String, dynamic>? metadata;
 
   const Task({
@@ -32,6 +33,7 @@ class Task extends Equatable {
     required this.isFlexible,
     required this.createdAt,
     required this.updatedAt,
+    this.completedAt,
     this.metadata,
   });
 
@@ -67,6 +69,7 @@ class Task extends Equatable {
     bool? isFlexible,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? completedAt,
     Map<String, dynamic>? metadata,
   }) {
     return Task(
@@ -82,6 +85,7 @@ class Task extends Equatable {
       isFlexible: isFlexible ?? this.isFlexible,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
       metadata: metadata ?? this.metadata,
     );
   }

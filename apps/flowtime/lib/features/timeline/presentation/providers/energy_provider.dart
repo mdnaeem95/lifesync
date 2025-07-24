@@ -1,75 +1,176 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/entities/energy_level.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_endpoints.dart';
+import './date_provider.dart';
 
 // Current energy level provider
-final currentEnergyProvider = StateProvider<AsyncValue<int>>((ref) {
-  // TODO: Fetch from actual data source
-  return const AsyncValue.data(75);
-});
-
-// Predicted energy levels for the day
-final predictedEnergyLevelsProvider = StateProvider<AsyncValue<List<EnergyPrediction>>>((ref) {
-  // TODO: Implement ML-based prediction
-  final predictions = <EnergyPrediction>[];
-  final now = DateTime.now();
+final currentEnergyProvider = FutureProvider<int>((ref) async {
+  final apiClient = ref.watch(apiClientProvider);
   
-  for (var hour = 0; hour < 24; hour++) {
-    final time = DateTime(now.year, now.month, now.day, hour);
-    predictions.add(EnergyPrediction(
-      time: time,
-      level: _calculateEnergyLevel(hour),
-    ));
+  try {
+    final response = await apiClient.get(ApiEndpoints.energyCurrent);
+    return response.data['level'] as int;
+  } catch (e) {
+    // Return default energy if API fails
+    return 75;
   }
-  
-  return AsyncValue.data(predictions);
 });
 
-int _calculateEnergyLevel(int hour) {
-  // Simple energy curve simulation
-  if (hour >= 6 && hour <= 9) return 70 + (hour - 6) * 5; // Morning rise
-  if (hour >= 10 && hour <= 12) return 85; // Peak morning
-  if (hour >= 13 && hour <= 15) return 60; // Post-lunch dip
-  if (hour >= 16 && hour <= 18) return 70; // Afternoon recovery
-  if (hour >= 19 && hour <= 21) return 65; // Evening
-  if (hour >= 22 || hour <= 5) return 40; // Night/Sleep
-  return 50;
-}
-
-class EnergyPrediction {
-  final DateTime time;
-  final int level;
-
-  EnergyPrediction({required this.time, required this.level});
-}
+// Predicted energy levels for the day (24 hours)
+final predictedEnergyLevelsProvider = FutureProvider<List<int>>((ref) async {
+  final apiClient = ref.watch(apiClientProvider);
+  final selectedDate = ref.watch(selectedDateProvider);
+  
+  try {
+    final response = await apiClient.get(
+      '${ApiEndpoints.energy}/predictions',
+      queryParameters: {
+        'date': selectedDate.toIso8601String().split('T')[0],
+      },
+    );
+    
+    return List<int>.from(response.data['predictions']);
+  } catch (e) {
+    // Return default energy pattern if API fails
+    return _generateDefaultEnergyPattern();
+  }
+});
 
 // Energy history provider
-final energyHistoryProvider = FutureProvider.family<List<EnergyLevel>, DateRange>((ref, range) async {
-  // TODO: Fetch from database
-  await Future.delayed(const Duration(milliseconds: 500));
+final energyHistoryProvider = FutureProvider.family<List<EnergyReading>, DateRange>((ref, dateRange) async {
+  final apiClient = ref.watch(apiClientProvider);
   
-  final history = <EnergyLevel>[];
-  var current = range.start;
-  
-  while (current.isBefore(range.end)) {
-    history.add(EnergyLevel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      level: 50 + (DateTime.now().millisecondsSinceEpoch % 50),
-      recordedAt: current,
-      factors: {
-        'sleep': 7.5,
-        'exercise': true,
-        'stress': 3,
+  try {
+    final response = await apiClient.get(
+      '${ApiEndpoints.energy}/history',
+      queryParameters: {
+        'start_date': dateRange.start.toIso8601String(),
+        'end_date': dateRange.end.toIso8601String(),
       },
-    ));
-    current = current.add(const Duration(hours: 1));
+    );
+    
+    return (response.data['readings'] as List)
+        .map((json) => EnergyReading.fromJson(json))
+        .toList();
+  } catch (e) {
+    return [];
   }
-  
-  return history;
 });
+
+// Record energy level
+final recordEnergyProvider = StateNotifierProvider<RecordEnergyNotifier, AsyncValue<void>>((ref) {
+  final apiClient = ref.watch(apiClientProvider);
+  return RecordEnergyNotifier(apiClient);
+});
+
+class RecordEnergyNotifier extends StateNotifier<AsyncValue<void>> {
+  final ApiClient _apiClient;
+
+  RecordEnergyNotifier(this._apiClient) : super(const AsyncValue.data(null));
+
+  Future<void> recordEnergy(int level, {Map<String, dynamic>? factors}) async {
+    state = const AsyncValue.loading();
+    
+    try {
+      await _apiClient.post(
+        ApiEndpoints.energy,
+        data: {
+          'level': level,
+          'factors': factors ?? {},
+          'source': 'manual',
+        },
+      );
+      
+      state = const AsyncValue.data(null);
+    } catch (error, stack) {
+      state = AsyncValue.error(error, stack);
+    }
+  }
+}
+
+// Helper function to generate default energy pattern
+List<int> _generateDefaultEnergyPattern() {
+  // Based on typical chronobiology patterns
+  return [
+    30, 25, 20, 20, 25, 30, // 12 AM - 5 AM (sleeping)
+    40, 50, 60, 75, 85, 90, // 6 AM - 11 AM (morning peak)
+    85, 75, 65, 55, 50, 55, // 12 PM - 5 PM (afternoon dip)
+    65, 70, 65, 55, 45, 35, // 6 PM - 11 PM (evening decline)
+  ];
+}
+
+// Models
+class EnergyReading {
+  final int level;
+  final DateTime recordedAt;
+  final Map<String, dynamic> factors;
+
+  EnergyReading({
+    required this.level,
+    required this.recordedAt,
+    required this.factors,
+  });
+
+  factory EnergyReading.fromJson(Map<String, dynamic> json) {
+    return EnergyReading(
+      level: json['level'],
+      recordedAt: DateTime.parse(json['recorded_at']),
+      factors: json['factors'] ?? {},
+    );
+  }
+}
 
 class DateRange {
   final DateTime start;
   final DateTime end;
 
   DateRange({required this.start, required this.end});
+}
+
+// Energy insights provider
+final energyInsightsProvider = FutureProvider<EnergyInsights>((ref) async {
+  final apiClient = ref.watch(apiClientProvider);
+  
+  try {
+    final response = await apiClient.get('${ApiEndpoints.energy}/insights');
+    return EnergyInsights.fromJson(response.data);
+  } catch (e) {
+    return EnergyInsights.empty();
+  }
+});
+
+class EnergyInsights {
+  final int averageEnergy;
+  final int peakEnergyHour;
+  final int lowEnergyHour;
+  final List<String> recommendations;
+  final Map<String, double> factorImpacts;
+
+  EnergyInsights({
+    required this.averageEnergy,
+    required this.peakEnergyHour,
+    required this.lowEnergyHour,
+    required this.recommendations,
+    required this.factorImpacts,
+  });
+
+  factory EnergyInsights.fromJson(Map<String, dynamic> json) {
+    return EnergyInsights(
+      averageEnergy: json['average_energy'],
+      peakEnergyHour: json['peak_energy_hour'],
+      lowEnergyHour: json['low_energy_hour'],
+      recommendations: List<String>.from(json['recommendations']),
+      factorImpacts: Map<String, double>.from(json['factor_impacts']),
+    );
+  }
+
+  factory EnergyInsights.empty() {
+    return EnergyInsights(
+      averageEnergy: 70,
+      peakEnergyHour: 10,
+      lowEnergyHour: 15,
+      recommendations: [],
+      factorImpacts: {},
+    );
+  }
 }
