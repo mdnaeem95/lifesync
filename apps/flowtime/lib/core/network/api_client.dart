@@ -1,18 +1,24 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../storage/secure_storage.dart';
+import '../../shared/router/app_router.dart';
 import 'api_endpoints.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final storage = ref.watch(secureStorageProvider);
-  return ApiClient(storage);
+  return ApiClient(storage, ref);
 });
 
 class ApiClient {
   late final Dio _dio;
   final SecureStorage _storage;
+  final Ref _ref;
+  bool _isRefreshing = false;
+  final List<Function> _failedQueue = [];
 
-  ApiClient(this._storage) {
+  ApiClient(this._storage, this._ref) {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiEndpoints.baseUrl,
@@ -35,42 +41,114 @@ class ApiClient {
           handler.next(options);
         },
         onError: (error, handler) async {
-          // Handle token refresh
+          // Handle 401 Unauthorized errors
           if (error.response?.statusCode == 401) {
-            final refreshToken = await _storage.getRefreshToken();
-            if (refreshToken != null) {
+            // Don't try to refresh if this is already a refresh request
+            if (error.requestOptions.path.contains('/auth/refresh')) {
+              await _handleAuthFailure();
+              handler.reject(error);
+              return;
+            }
+
+            if (!_isRefreshing) {
+              _isRefreshing = true;
+              
               try {
-                final response = await _dio.post(
-                  ApiEndpoints.refreshToken,
-                  data: {'refresh_token': refreshToken},
-                );
-                
-                final newToken = response.data['access_token'];
-                await _storage.saveAccessToken(newToken);
-                
-                // Retry original request
-                error.requestOptions.headers['Authorization'] = 'Bearer $newToken';
-                final clonedRequest = await _dio.request(
-                  error.requestOptions.path,
-                  options: Options(
-                    method: error.requestOptions.method,
-                    headers: error.requestOptions.headers,
-                  ),
-                  data: error.requestOptions.data,
-                  queryParameters: error.requestOptions.queryParameters,
-                );
-                
-                return handler.resolve(clonedRequest);
+                final refreshToken = await _storage.getRefreshToken();
+                if (refreshToken != null) {
+                  final response = await _dio.post(
+                    ApiEndpoints.refreshToken,
+                    data: {'refresh_token': refreshToken},
+                    options: Options(
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                    ),
+                  );
+                  
+                  if (response.statusCode == 200) {
+                    final newAccessToken = response.data['access_token'];
+                    final newRefreshToken = response.data['refresh_token'] ?? refreshToken;
+                    
+                    await _storage.saveAccessToken(newAccessToken);
+                    await _storage.saveRefreshToken(newRefreshToken);
+                    
+                    // Retry failed requests
+                    _failedQueue.forEach((callback) => callback());
+                    _failedQueue.clear();
+                    
+                    // Retry original request
+                    error.requestOptions.headers['Authorization'] = 'Bearer $newAccessToken';
+                    final clonedRequest = await _dio.request(
+                      error.requestOptions.path,
+                      options: Options(
+                        method: error.requestOptions.method,
+                        headers: error.requestOptions.headers,
+                      ),
+                      data: error.requestOptions.data,
+                      queryParameters: error.requestOptions.queryParameters,
+                    );
+                    
+                    _isRefreshing = false;
+                    return handler.resolve(clonedRequest);
+                  }
+                }
               } catch (e) {
-                // Refresh failed, clear tokens
-                await _storage.clearTokens();
+                // Refresh failed
+                _failedQueue.clear();
+                _isRefreshing = false;
+                await _handleAuthFailure();
+                handler.reject(error);
+                return;
               }
+              
+              _isRefreshing = false;
+              await _handleAuthFailure();
+              handler.reject(error);
+              return;
+            } else {
+              // Add to queue if already refreshing
+              final completer = Future(() async {
+                final token = await _storage.getAccessToken();
+                if (token != null) {
+                  error.requestOptions.headers['Authorization'] = 'Bearer $token';
+                  final clonedRequest = await _dio.request(
+                    error.requestOptions.path,
+                    options: Options(
+                      method: error.requestOptions.method,
+                      headers: error.requestOptions.headers,
+                    ),
+                    data: error.requestOptions.data,
+                    queryParameters: error.requestOptions.queryParameters,
+                  );
+                  return handler.resolve(clonedRequest);
+                }
+                handler.reject(error);
+              });
+              
+              _failedQueue.add(() => completer);
+              return;
             }
           }
+          
           handler.next(error);
         },
       ),
     );
+  }
+
+  Future<void> _handleAuthFailure() async {
+    // Clear all auth data
+    await _storage.clearTokens();
+    
+    // Sign out the user through the auth provider
+    await _ref.read(authNotifierProvider.notifier).signOut();
+    
+    // Navigate to sign in screen
+    final context = _ref.read(routerProvider).routerDelegate.navigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      context.go('/auth/signin');
+    }
   }
 
   // HTTP methods

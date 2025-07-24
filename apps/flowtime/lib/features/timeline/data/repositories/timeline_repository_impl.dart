@@ -5,7 +5,7 @@ import '../../../../core/network/api_endpoints.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/repositories/timeline_repository.dart';
 import '../models/task_model.dart';
-import '../mappers/task_mapper.dart'; // Add this import
+import '../mappers/task_mapper.dart';
 
 final timelineRepositoryProvider = Provider<TimelineRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -27,12 +27,29 @@ class TimelineRepositoryImpl implements TimelineRepository {
         },
       );
 
-      final tasks = (response.data as List)
-          .map((json) => TaskModel.fromJson(json))
-          .map((model) => TaskMapper.toEntity(model)) // Use mapper here
-          .toList();
+      // Handle empty response
+      if (response.data == null) {
+        return [];
+      }
 
-      return tasks;
+      // Handle response data safely
+      final responseData = response.data;
+      if (responseData is List) {
+        return responseData
+            .map((json) => TaskModel.fromJson(json))
+            .map((model) => TaskMapper.toEntity(model))
+            .toList();
+      } else if (responseData is Map && responseData.containsKey('tasks')) {
+        // Handle wrapped response
+        final tasksList = responseData['tasks'] as List;
+        return tasksList
+            .map((json) => TaskModel.fromJson(json))
+            .map((model) => TaskMapper.toEntity(model))
+            .toList();
+      } else {
+        // Return empty list if response format is unexpected
+        return [];
+      }
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -43,10 +60,10 @@ class TimelineRepositoryImpl implements TimelineRepository {
     try {
       final response = await _apiClient.post(
         ApiEndpoints.tasks,
-        data: TaskMapper.fromEntity(task).toJson(), // Use mapper here
+        data: TaskMapper.fromEntity(task).toJson(),
       );
 
-      return TaskMapper.toEntity(TaskModel.fromJson(response.data)); // Use mapper here
+      return TaskMapper.toEntity(TaskModel.fromJson(response.data));
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -57,10 +74,10 @@ class TimelineRepositoryImpl implements TimelineRepository {
     try {
       final response = await _apiClient.put(
         '${ApiEndpoints.tasks}/$taskId',
-        data: TaskMapper.fromEntity(task).toJson(), // Use mapper here
+        data: TaskMapper.fromEntity(task).toJson(),
       );
 
-      return TaskMapper.toEntity(TaskModel.fromJson(response.data)); // Use mapper here
+      return TaskMapper.toEntity(TaskModel.fromJson(response.data));
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -88,6 +105,17 @@ class TimelineRepositoryImpl implements TimelineRepository {
   }
 
   @override
+  Future<void> toggleTaskComplete(String taskId) async {
+    try {
+      await _apiClient.patch(
+        '${ApiEndpoints.tasks}/$taskId/toggle-complete',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  @override
   Future<Task> rescheduleTask(String taskId, DateTime newTime) async {
     try {
       final response = await _apiClient.patch(
@@ -95,7 +123,7 @@ class TimelineRepositoryImpl implements TimelineRepository {
         data: {'scheduled_at': newTime.toIso8601String()},
       );
 
-      return TaskMapper.toEntity(TaskModel.fromJson(response.data)); // Use mapper here
+      return TaskMapper.toEntity(TaskModel.fromJson(response.data));
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -126,27 +154,53 @@ class TimelineRepositoryImpl implements TimelineRepository {
   }
 
   Exception _handleError(DioException error) {
+    // Handle connection errors
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout) {
       return Exception('Connection timeout. Please try again.');
     }
 
+    if (error.type == DioExceptionType.connectionError) {
+      return Exception('Unable to connect to server. Please check your internet connection.');
+    }
+
+    // Handle response errors
     if (error.response != null) {
       final statusCode = error.response!.statusCode;
-      final message = error.response!.data['message'] ?? 'An error occurred';
+      
+      // Safely extract error message
+      String message = 'An error occurred';
+      final responseData = error.response!.data;
+      
+      if (responseData != null) {
+        if (responseData is Map) {
+          // Try different possible message fields
+          message = responseData['message']?.toString() ?? 
+                   responseData['error']?.toString() ?? 
+                   responseData['detail']?.toString() ?? 
+                   'Server error';
+        } else if (responseData is String) {
+          message = responseData;
+        }
+      }
 
       switch (statusCode) {
         case 401:
-          return Exception('Unauthorized. Please sign in again.');
+          return Exception('Session expired. Please sign in again.');
+        case 403:
+          return Exception('You don\'t have permission to perform this action.');
         case 404:
-          return Exception('Task not found.');
+          return Exception('Resource not found.');
         case 422:
-          return Exception('Invalid data provided.');
+          return Exception('Invalid data provided. Please check your input.');
+        case 500:
+          return Exception('Server error. Please try again later.');
         default:
           return Exception(message);
       }
     }
 
+    // Default error
     return Exception('Network error. Please check your connection.');
   }
 }

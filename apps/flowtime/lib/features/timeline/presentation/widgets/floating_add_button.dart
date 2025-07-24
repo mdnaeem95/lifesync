@@ -48,15 +48,6 @@ class FloatingAddButton extends StatelessWidget {
         .scale(
           duration: 600.ms,
           curve: Curves.elasticOut,
-        )
-        .then()
-        .animate(
-          onPlay: (controller) => controller.repeat(reverse: true),
-        )
-        .scale(
-          begin: const Offset(1, 1),
-          end: const Offset(1.05, 1.05),
-          duration: 2000.ms,
         );
   }
 }

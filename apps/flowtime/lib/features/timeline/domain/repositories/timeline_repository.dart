@@ -6,6 +6,7 @@ abstract class TimelineRepository {
   Future<Task> updateTask(String taskId, Task task);
   Future<void> deleteTask(String taskId);
   Future<void> completeTask(String taskId);
+  Future<void> toggleTaskComplete(String taskId);
   Future<Task> rescheduleTask(String taskId, DateTime newTime);
   Future<List<DateTime>> getSuggestedTimeSlots(
     Duration duration,

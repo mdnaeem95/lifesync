@@ -8,6 +8,11 @@ import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
 import '../../features/account/presentation/screens/account_screen.dart';
 
+// Expose the router instance globally for navigation
+final routerProvider = Provider<GoRouter>((ref) {
+  return ref.watch(appRouterProvider);
+});
+
 final appRouterProvider = Provider<GoRouter>((ref) { 
   return GoRouter(
     initialLocation: '/auth/signin',
