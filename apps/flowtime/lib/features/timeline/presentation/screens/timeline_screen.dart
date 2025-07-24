@@ -1,5 +1,3 @@
-// lib/features/timeline/presentation/screens/timeline_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -27,6 +25,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   late ScrollController _scrollController;
   late AnimationController _fabAnimationController;
   int _currentIndex = 0;
+  bool _isScrollControllerReady = false;
 
   @override
   void initState() {
@@ -37,9 +36,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
       duration: const Duration(milliseconds: 300),
     );
     
-    // Scroll to current time on load
+    // Delay scroll to current time to ensure the controller is attached
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToCurrentTime();
+      // Add another frame callback to ensure the timeline is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isScrollControllerReady) {
+          _scrollToCurrentTime();
+        }
+      });
     });
   }
 
@@ -51,12 +55,21 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   }
 
   void _scrollToCurrentTime() {
+    // Check if controller is attached before scrolling
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    
     final now = DateTime.now();
     final hoursSinceMidnight = now.hour + (now.minute / 60);
     final scrollPosition = hoursSinceMidnight * 80.0; // 80px per hour
     
+    // Ensure position is within valid range
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final targetPosition = (scrollPosition - 200).clamp(0.0, maxScroll);
+    
     _scrollController.animateTo(
-      scrollPosition - 200, // Offset to show some context
+      targetPosition,
       duration: const Duration(milliseconds: 800),
       curve: Curves.easeOutCubic,
     );
@@ -121,7 +134,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
               onTodayPressed: () {
                 ref.read(selectedDateProvider.notifier).state = DateTime.now();
                 ref.read(timelineProvider.notifier).loadTasksForDate(DateTime.now());
-                _scrollToCurrentTime();
+                // Delay to ensure timeline is loaded
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted && _isScrollControllerReady) {
+                    _scrollToCurrentTime();
+                  }
+                });
               },
             ).animate().fadeIn().slideY(begin: -0.2),
             
@@ -137,16 +155,26 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
             // Main timeline view
             Expanded(
               child: timelineState.when(
-                data: (timeBlocks) => TimelineView(
-                  scrollController: _scrollController,
-                  timeBlocks: timeBlocks,
-                  onTaskTap: (task) => _showTaskDetails(task),
-                  onTaskComplete: (task) {
-                    ref.read(timelineProvider.notifier).toggleTaskComplete(task.id);
-                  },
-                  onTaskReschedule: (task) => _showRescheduleDialog(task),
-                  onEmptyBlockTap: (timeBlock) => _showQuickAddTask(timeBlock),
-                ),
+                data: (timeBlocks) {
+                  // Mark controller as ready when data is loaded
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!_isScrollControllerReady) {
+                      _isScrollControllerReady = true;
+                      _scrollToCurrentTime();
+                    }
+                  });
+                  
+                  return TimelineView(
+                    scrollController: _scrollController,
+                    timeBlocks: timeBlocks,
+                    onTaskTap: (task) => _showTaskDetails(task),
+                    onTaskComplete: (task) {
+                      ref.read(timelineProvider.notifier).toggleTaskComplete(task.id);
+                    },
+                    onTaskReschedule: (task) => _showRescheduleDialog(task),
+                    onEmptyBlockTap: (timeBlock) => _showQuickAddTask(timeBlock),
+                  );
+                },
                 loading: () => const Center(
                   child: CircularProgressIndicator(
                     color: AppColors.primary,
@@ -267,7 +295,7 @@ class _TaskDetailsSheet extends ConsumerWidget {
             child: Container(
               width: 40,
               height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
+              margin: const EdgeInsets.only(bottom: 24),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
@@ -275,65 +303,34 @@ class _TaskDetailsSheet extends ConsumerWidget {
             ),
           ),
           
-          // Task info
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  task.title,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-              if (task.isCompleted)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.check_circle, size: 16, color: AppColors.success),
-                      SizedBox(width: 4),
-                      Text('Completed', style: TextStyle(color: AppColors.success)),
-                    ],
-                  ),
-                ),
-            ],
+          // Task title
+          Text(
+            task.title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          
           if (task.description != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Text(
               task.description!,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
-          
           const SizedBox(height: 24),
           
           // Task details
-          _buildDetailRow(
-            Icons.schedule,
-            'Scheduled',
-            '${task.scheduledAt.hour.toString().padLeft(2, '0')}:${task.scheduledAt.minute.toString().padLeft(2, '0')}',
-          ),
-          _buildDetailRow(
-            Icons.timer,
-            'Duration',
-            '${task.duration.inMinutes} minutes',
-          ),
-          _buildDetailRow(
-            Icons.bolt,
-            'Energy Required',
-            '${task.energyRequired}/5',
-          ),
-          _buildDetailRow(
-            Icons.flag,
-            'Priority',
-            task.priority.name.toUpperCase(),
-          ),
+          _buildDetailRow(Icons.schedule, 'Scheduled', 
+            '${task.scheduledAt.hour.toString().padLeft(2, '0')}:${task.scheduledAt.minute.toString().padLeft(2, '0')}'),
+          _buildDetailRow(Icons.timer, 'Duration', '${task.duration.inMinutes} minutes'),
+          _buildDetailRow(Icons.bolt, 'Energy Required', '${task.energyRequired}/5'),
+          _buildDetailRow(Icons.flag, 'Priority', task.priority.name.toUpperCase()),
+          if (task.isFlexible)
+            _buildDetailRow(Icons.swap_horiz, 'Flexibility', 'Can be rescheduled'),
           
           const SizedBox(height: 24),
           

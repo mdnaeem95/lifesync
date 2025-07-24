@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:local_auth/local_auth.dart';
-import '../../domain/repositories/auth_repository.dart';
-import '../../domain/entities/user.dart';
-import '../../../../core/errors/failures.dart';
 import '../../../../core/errors/exceptions.dart';
-import '../datasources/auth_remote_data_source.dart';
+import '../../../../core/errors/failures.dart';
+import '../../domain/entities/user.dart';
+import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_data_source.dart';
+import '../datasources/auth_remote_data_source.dart';
 import '../models/auth_token_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
@@ -14,7 +14,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final IAuthLocalDataSource localDataSource;
   final LocalAuthentication localAuth;
   
-  final _authStateController = StreamController<User?>.broadcast();
+  final StreamController<User?> _authStateController = StreamController<User?>.broadcast();
   User? _currentUser;
 
   AuthRepositoryImpl({
@@ -137,20 +137,17 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> signInWithGoogle() async {
     try {
-      // Now returns AuthResponse (contains tokens + user)
       final authResponse = await remoteDataSource.signInWithGoogle();
 
-      // Cache the user object only
+      // Cache the user AND tokens - IMPORTANT!
       await localDataSource.cacheUser(authResponse.user);
-
-      // Optionally cache tokens if you want:
-      // await localDataSource.saveTokens(
-      //   AuthTokenModel(
-      //     accessToken: authResponse.accessToken,
-      //     refreshToken: authResponse.refreshToken,
-      //     expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
-      //   ),
-      // );
+      await localDataSource.saveTokens(
+        AuthTokenModel(
+          accessToken: authResponse.accessToken,
+          refreshToken: authResponse.refreshToken,
+          expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
+        ),
+      );
 
       _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
@@ -168,15 +165,15 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final authResponse = await remoteDataSource.signInWithApple();
 
+      // Cache the user AND tokens - IMPORTANT!
       await localDataSource.cacheUser(authResponse.user);
-      // Optionally cache tokens
-      // await localDataSource.saveTokens(
-      //   AuthTokenModel(
-      //     accessToken: authResponse.accessToken,
-      //     refreshToken: authResponse.refreshToken,
-      //     expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
-      //   ),
-      // );
+      await localDataSource.saveTokens(
+        AuthTokenModel(
+          accessToken: authResponse.accessToken,
+          refreshToken: authResponse.refreshToken,
+          expiresAt: DateTime.now().add(Duration(seconds: authResponse.expiresIn)),
+        ),
+      );
 
       _currentUser = authResponse.user.toEntity();
       _authStateController.add(_currentUser);
@@ -221,6 +218,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> signOut() async {
     try {
+      // Note: signout endpoint returns 404, but we continue with local signout
       await remoteDataSource.signOut();
     } catch (e) {
       // Continue with local signout even if remote fails

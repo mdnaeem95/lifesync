@@ -8,9 +8,9 @@ final secureStorageProvider = Provider<SecureStorage>((ref) {
 class SecureStorage {
   static const _storage = FlutterSecureStorage();
   
-  // Keys
-  static const String _accessTokenKey = 'access_token';
-  static const String _refreshTokenKey = 'refresh_token';
+  // Keys - MUST match AuthLocalDataSource keys!
+  static const String _accessTokenKey = 'ACCESS_TOKEN';
+  static const String _refreshTokenKey = 'REFRESH_TOKEN';
   static const String _userIdKey = 'user_id';
   static const String _userEmailKey = 'user_email';
   static const String _userNameKey = 'user_name';
