@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/task.dart';
 import '../providers/timeline_provider.dart';
-import '../providers/energy_provider.dart';
 
 class QuickAddTaskSheet extends ConsumerStatefulWidget {
   final DateTime? suggestedTime;
@@ -48,9 +47,11 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
       _selectedDuration,
       _energyRequired,
     );
-    setState(() {
-      _suggestedSlots = slots;
-    });
+    if (mounted) {
+      setState(() {
+        _suggestedSlots = slots;
+      });
+    }
   }
 
   @override
@@ -103,6 +104,19 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
               ),
             ).animate().fadeIn(delay: 100.ms),
             
+            const SizedBox(height: 12),
+            
+            // Description input (optional)
+            TextField(
+              controller: _descriptionController,
+              maxLines: 2,
+              style: const TextStyle(fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: 'Add details (optional)',
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ).animate().fadeIn(delay: 150.ms),
+            
             const SizedBox(height: 16),
             
             // Duration selection
@@ -147,6 +161,13 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
             
             const SizedBox(height: 20),
             
+            // Time selection
+            _buildSectionTitle('When'),
+            const SizedBox(height: 8),
+            _buildTimeSelection().animate().fadeIn(delay: 500.ms),
+            
+            const SizedBox(height: 20),
+            
             // Flexible scheduling toggle
             SwitchListTile(
               value: _isFlexible,
@@ -154,51 +175,30 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
               title: const Text('Flexible Scheduling'),
               subtitle: Text(
                 'Allow AI to reschedule if needed',
-                style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                style: TextStyle(color: AppColors.textTertiary),
               ),
               contentPadding: EdgeInsets.zero,
-              activeThumbColor: AppColors.primary,
-            ).animate().fadeIn(delay: 500.ms),
-            
-            const SizedBox(height: 20),
-            
-            // Suggested time slots
-            if (_suggestedSlots.isNotEmpty) ...[
-              _buildSectionTitle('AI Suggested Times'),
-              const SizedBox(height: 8),
-              ..._suggestedSlots.take(3).map((slot) => _buildTimeSlot(slot)),
-            ],
+            ).animate().fadeIn(delay: 600.ms),
             
             const SizedBox(height: 24),
             
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
+            // Submit button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isLoading ? null : _createTask,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _createTask,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Add to Timeline'),
-                  ),
-                ),
-              ],
-            ).animate().fadeIn(delay: 600.ms),
+                child: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Add Task'),
+              ),
+            ).animate().fadeIn(delay: 700.ms).scale(),
           ],
         ),
       ),
@@ -209,70 +209,56 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.textSecondary,
+        letterSpacing: 0.5,
       ),
     );
   }
 
   Widget _buildDurationChip(int minutes) {
     final isSelected = _selectedDuration.inMinutes == minutes;
-    final label = minutes < 60 ? '$minutes min' : '${minutes ~/ 60} hr${minutes > 60 ? 's' : ''}';
-
+    
     return ChoiceChip(
-      label: Text(label),
+      label: Text('${minutes}m'),
       selected: isSelected,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _selectedDuration = Duration(minutes: minutes);
-          });
-          _loadSuggestedSlots();
-        }
+      onSelected: (_) {
+        setState(() => _selectedDuration = Duration(minutes: minutes));
+        _loadSuggestedSlots();
       },
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.cardDark,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : AppColors.textSecondary,
-        fontSize: 14,
-      ),
-      side: BorderSide(
-        color: isSelected ? AppColors.primary : AppColors.borderSubtle,
-      ),
     );
   }
 
   Widget _buildTaskTypeCard(TaskType type, IconData icon, String label) {
     final isSelected = _selectedType == type;
-
-    return GestureDetector(
+    
+    return InkWell(
       onTap: () => setState(() => _selectedType = type),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? _getTaskTypeColor(type).withValues(alpha: 0.15) : AppColors.cardDark,
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? _getTaskTypeColor(type).withValues(alpha: 0.2) : Colors.transparent,
           border: Border.all(
             color: isSelected ? _getTaskTypeColor(type) : AppColors.borderSubtle,
             width: isSelected ? 2 : 1,
           ),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
+              color: isSelected ? _getTaskTypeColor(type) : AppColors.textSecondary,
               size: 24,
-              color: isSelected ? _getTaskTypeColor(type) : AppColors.textTertiary,
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isSelected ? Colors.white : AppColors.textSecondary,
+                color: isSelected ? _getTaskTypeColor(type) : AppColors.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
@@ -283,128 +269,218 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
   }
 
   Widget _buildEnergySelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(5, (index) {
-              final level = index + 1;
-              final isSelected = level <= _energyRequired;
-              
-              return GestureDetector(
-                onTap: () => setState(() => _energyRequired = level),
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(5, (index) {
+            final level = index + 1;
+            final isSelected = _energyRequired == level;
+            
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _energyRequired = level);
+                  _loadSuggestedSlots();
+                },
                 child: Container(
-                  width: 40,
                   height: 40,
+                  margin: EdgeInsets.only(right: index < 4 ? 8 : 0),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected
-                        ? _getEnergyColor(_energyRequired * 20)
-                        : Colors.transparent,
+                    color: isSelected ? _getEnergyColor(level * 20).withValues(alpha: 0.2) : Colors.transparent,
                     border: Border.all(
-                      color: isSelected
-                          ? _getEnergyColor(_energyRequired * 20)
-                          : AppColors.borderSubtle,
-                      width: 2,
+                      color: isSelected ? _getEnergyColor(level * 20) : AppColors.borderSubtle,
+                      width: isSelected ? 2 : 1,
                     ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.bolt,
-                      size: 20,
-                      color: isSelected ? Colors.white : AppColors.textTertiary,
+                    child: Text(
+                      '$level',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected ? _getEnergyColor(level * 20) : AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 ),
-              );
-            }),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _getEnergyDescription(_energyRequired),
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textTertiary,
           ),
-          const SizedBox(height: 8),
-          Text(
-            _getEnergyDescription(_energyRequired),
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeSelection() {
+    return Column(
+      children: [
+        // Selected time display
+        InkWell(
+          onTap: _selectCustomTime,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.primary, width: 2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.schedule, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Text(
+                  _formatDateTime(_selectedTime!),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.edit, size: 16, color: AppColors.textSecondary),
+              ],
             ),
           ),
+        ),
+        
+        if (_suggestedSlots.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Suggested times based on your energy',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...(_suggestedSlots.take(3).map((slot) => _buildSuggestedSlot(slot))),
         ],
+      ],
+    );
+  }
+
+  Widget _buildSuggestedSlot(DateTime slot) {
+    final isSelected = _selectedTime?.isAtSameMomentAs(slot) ?? false;
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () => setState(() => _selectedTime = slot),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.borderSubtle,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Text(
+                _formatDateTime(slot),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.flash_on,
+                size: 16,
+                color: AppColors.warning,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Optimal',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildTimeSlot(DateTime slot) {
-    final isSelected = _selectedTime?.isAtSameMomentAs(slot) ?? false;
-    final timeStr = '${slot.hour.toString().padLeft(2, '0')}:${slot.minute.toString().padLeft(2, '0')}';
-    final energyLevel = ref.read(predictedEnergyLevelsProvider).value?[slot.hour] ?? 70;
-
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTime = slot),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.15) : AppColors.cardDark,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.borderSubtle,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              timeStr,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? Colors.white : AppColors.textPrimary,
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _getEnergyColor(energyLevel),
-                  ),
-                ),
-                Text(
-                  'Energy: $energyLevel%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  Future<void> _selectCustomTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedTime!,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
+    
+    if (date != null && mounted) {
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_selectedTime!),
+      );
+      
+      if (time != null && mounted) {
+        setState(() {
+          _selectedTime = DateTime(
+            date.year,
+            date.month,
+            date.day,
+            time.hour,
+            time.minute,
+          );
+        });
+      }
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final isToday = dateTime.year == now.year && 
+                     dateTime.month == now.month && 
+                     dateTime.day == now.day;
+    final isTomorrow = dateTime.year == now.year && 
+                        dateTime.month == now.month && 
+                        dateTime.day == now.day + 1;
+    
+    String dateStr;
+    if (isToday) {
+      dateStr = 'Today';
+    } else if (isTomorrow) {
+      dateStr = 'Tomorrow';
+    } else {
+      dateStr = '${dateTime.day}/${dateTime.month}';
+    }
+    
+    final timeStr = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return '$dateStr at $timeStr';
   }
 
   Future<void> _createTask() async {
     if (_titleController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a task title')),
+        const SnackBar(
+          content: Text('Please enter a task title'),
+          backgroundColor: AppColors.error,
+        ),
       );
       return;
     }
 
     await ref.read(quickAddTaskProvider.notifier).createTask(
-      title: _titleController.text,
-      description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim().isEmpty 
+          ? null 
+          : _descriptionController.text.trim(),
       scheduledAt: _selectedTime!,
       duration: _selectedDuration,
       taskType: _selectedType,
@@ -426,7 +502,7 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
   Color _getTaskTypeColor(TaskType type) {
     switch (type) {
       case TaskType.focus:
-        return AppColors.focus;
+        return AppColors.primary;
       case TaskType.meeting:
         return AppColors.warning;
       case TaskType.breakTask:
@@ -438,7 +514,7 @@ class _QuickAddTaskSheetState extends ConsumerState<QuickAddTaskSheet> {
 
   Color _getEnergyColor(int level) {
     if (level >= 80) return AppColors.success;
-    if (level >= 60) return AppColors.focus;
+    if (level >= 60) return AppColors.primary;
     if (level >= 40) return AppColors.warning;
     return AppColors.error;
   }
