@@ -6,6 +6,7 @@ import '../../features/auth/presentation/screens/signin_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
+import '../../features/energy/presentation/screens/energy_dashboard_screen.dart';
 import '../../features/account/presentation/screens/account_screen.dart';
 
 // Expose the router instance globally for navigation
@@ -65,15 +66,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const TimelineScreen(),
       ),
       GoRoute(
-        path: '/account',
-        builder: (context, state) => const AccountScreen(),
-      ),
-      GoRoute(
         path: '/energy',
-        builder: (context, state) => Scaffold(
-          appBar: AppBar(title: const Text('Energy Dashboard')),
-          body: const Center(child: Text('Energy Dashboard - Coming Soon')),
-        ),
+        builder: (context, state) => const EnergyDashboardScreen(),
       ),
       GoRoute(
         path: '/focus',
@@ -89,49 +83,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           body: const Center(child: Text('Insights - Coming Soon')),
         ),
       ),
-      // Add a root redirect
       GoRoute(
-        path: '/',
-        redirect: (context, state) => '/auth/signin',
+        path: '/account',
+        builder: (context, state) => const AccountScreen(),
       ),
     ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Navigation Error',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              state.error?.toString() ?? 'Unknown error occurred',
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => context.go('/auth/signin'),
-              child: const Text('Go to Sign In'),
-            ),
-          ],
-        ),
-      ),
-    ),
   );
 });
 
-// Helper class to convert AsyncValue changes to Listenable
 class GoRouterRefreshStream extends ChangeNotifier {
-  final Ref ref;
-  
-  GoRouterRefreshStream(this.ref) {
+  GoRouterRefreshStream(Ref ref) {
     // Listen to auth state changes
-    ref.listen(authNotifierProvider, (previous, next) {
-      // Notify listeners whenever auth state changes
+    ref.listen(authNotifierProvider, (_, __) {
       notifyListeners();
     });
   }
