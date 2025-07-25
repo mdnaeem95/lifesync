@@ -1,46 +1,42 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
+import 'date_provider.dart';
 import '../../data/repositories/timeline_repository_impl.dart';
-import '../../domain/repositories/timeline_repository.dart';
-import '../../domain/entities/time_block.dart';
 import '../../domain/entities/task.dart';
+import '../../domain/entities/time_block.dart';
+import '../../domain/repositories/timeline_repository.dart';
 import 'energy_provider.dart';
 
-// Selected date provider
-final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
-
-// Timeline provider
+// Timeline state provider
 final timelineProvider = StateNotifierProvider<TimelineNotifier, AsyncValue<List<TimeBlock>>>((ref) {
   final repository = ref.watch(timelineRepositoryProvider);
-  final selectedDate = ref.watch(selectedDateProvider);
-  
-  return TimelineNotifier(
-    repository: repository,
-    ref: ref,
-  )..loadTasksForDate(selectedDate);
+  return TimelineNotifier(ref, repository);
 });
 
 class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
-  final TimelineRepository _repository;
   final Ref _ref;
-  
-  TimelineNotifier({
-    required TimelineRepository repository,
-    required Ref ref,
-  })  : _repository = repository,
-        _ref = ref,
-        super(const AsyncValue.loading());
+  final TimelineRepository _repository;
+  final _logger = Logger('TimelineNotifier');
+
+  TimelineNotifier(this._ref, this._repository) : super(const AsyncValue.loading()) {
+    loadTasks();
+  }
+
+  Future<void> loadTasks() async {
+    final date = _ref.read(selectedDateProvider);
+    await loadTasksForDate(date);
+  }
 
   Future<void> loadTasksForDate(DateTime date) async {
-    state = const AsyncValue.loading();
-    
     try {
-      // Fetch tasks from repository
+      state = const AsyncValue.loading();
+      
       final tasks = await _repository.getTasksForDate(date);
       
-      // Get predicted energy levels for the day
+      // Get predicted energy levels
       final energyLevels = _ref.read(predictedEnergyLevelsProvider).value ?? [];
       
-      // Generate time blocks with energy predictions
+      // Generate time blocks ONLY for tasks (no empty blocks)
       final timeBlocks = _generateTimeBlocks(tasks, date, energyLevels);
       
       state = AsyncValue.data(timeBlocks);
@@ -60,54 +56,68 @@ class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
     // Sort tasks by scheduled time
     tasks.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     
-    // Track occupied time slots
-    final occupiedSlots = <DateTime, Task>{};
-    for (final task in tasks) {
-      occupiedSlots[task.scheduledAt] = task;
-    }
+    // Check for overlaps and adjust if necessary
+    final adjustedTasks = _preventOverlaps(tasks);
     
-    // Generate blocks for each hour
-    for (var hour = 0; hour < 24; hour++) {
-      final blockStart = DateTime(date.year, date.month, date.day, hour);
-      final blockEnd = blockStart.add(const Duration(hours: 1));
-      
-      // Find tasks in this hour
-      final hourTasks = tasks.where((task) {
-        return task.scheduledAt.isBefore(blockEnd) &&
-            task.endTime.isAfter(blockStart);
-      }).toList();
-      
-      if (hourTasks.isEmpty) {
-        // Create empty block
-        blocks.add(TimeBlock(
-          startTime: blockStart,
-          endTime: blockEnd,
-          task: null,
-          predictedEnergyLevel: _getEnergyForHour(hour, energyLevels),
-          isCurrentBlock: _isCurrentBlock(blockStart, blockEnd, now),
-        ));
-      } else {
-        // Create blocks for tasks
-        for (final task in hourTasks) {
-          final start = task.scheduledAt.isBefore(blockStart)
-              ? blockStart
-              : task.scheduledAt;
-          final end = task.endTime.isAfter(blockEnd)
-              ? blockEnd
-              : task.endTime;
-          
-          blocks.add(TimeBlock(
-            startTime: start,
-            endTime: end,
-            task: task,
-            predictedEnergyLevel: _getEnergyForHour(start.hour, energyLevels),
-            isCurrentBlock: _isCurrentBlock(start, end, now),
-          ));
-        }
-      }
+    // Create blocks only for actual tasks
+    for (final task in adjustedTasks) {
+      blocks.add(TimeBlock(
+        startTime: task.scheduledAt,
+        endTime: task.endTime,
+        task: task,
+        predictedEnergyLevel: _getEnergyForHour(task.scheduledAt.hour, energyLevels),
+        isCurrentBlock: _isCurrentBlock(task.scheduledAt, task.endTime, now),
+      ));
     }
     
     return blocks;
+  }
+
+  List<Task> _preventOverlaps(List<Task> tasks) {
+    if (tasks.isEmpty) return tasks;
+    
+    final adjustedTasks = <Task>[];
+    
+    for (int i = 0; i < tasks.length; i++) {
+      var currentTask = tasks[i];
+      
+      // Check if this task overlaps with any previously added task
+      bool hasOverlap = false;
+      for (final existingTask in adjustedTasks) {
+        if (_tasksOverlap(currentTask, existingTask)) {
+          hasOverlap = true;
+          
+          // Adjust the current task to start after the existing task ends
+          final newStartTime = existingTask.endTime;
+          final duration = currentTask.endTime.difference(currentTask.scheduledAt);
+          
+          currentTask = currentTask.copyWith(
+            scheduledAt: newStartTime,
+            duration: duration,
+          );
+          break;
+        }
+      }
+      
+      // If task was adjusted, check again for new overlaps
+      if (hasOverlap) {
+        // Recursive check to ensure no new overlaps were created
+        final tempList = [...adjustedTasks, currentTask];
+        tempList.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+        adjustedTasks.clear();
+        adjustedTasks.addAll(_preventOverlaps(tempList));
+      } else {
+        adjustedTasks.add(currentTask);
+      }
+    }
+    
+    return adjustedTasks;
+  }
+
+  bool _tasksOverlap(Task task1, Task task2) {
+    // Tasks overlap if one starts before the other ends
+    return (task1.scheduledAt.isBefore(task2.endTime) && 
+            task1.endTime.isAfter(task2.scheduledAt));
   }
 
   int _getEnergyForHour(int hour, List<int> energyLevels) {
@@ -130,22 +140,22 @@ class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
       await _repository.completeTask(taskId);
       
       // Reload tasks
-      final date = _ref.read(selectedDateProvider);
-      await loadTasksForDate(date);
-    } catch (error) {
-      state = AsyncValue.error(error, StackTrace.current);
+      await loadTasks();
+    } catch (error, stackTrace) {
+      _logger.severe('Error completing task: $taskId', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 
-  Future<void> rescheduleTask(String taskId, DateTime newTime) async {
+  Future<void> updateTask(Task task) async {
     try {
-      await _repository.rescheduleTask(taskId, newTime);
+      await _repository.updateTask(task.id, task);
       
-      // Reload tasks
-      final date = _ref.read(selectedDateProvider);
-      await loadTasksForDate(date);
-    } catch (error) {
-      state = AsyncValue.error(error, StackTrace.current);
+      // Reload tasks to reflect changes and check for overlaps
+      await loadTasks();
+    } catch (error, stackTrace) {
+      _logger.severe('Error updating task: ${task.id}', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 
@@ -154,25 +164,56 @@ class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
       await _repository.deleteTask(taskId);
       
       // Reload tasks
-      final date = _ref.read(selectedDateProvider);
-      await loadTasksForDate(date);
-    } catch (error) {
-      state = AsyncValue.error(error, StackTrace.current);
+      await loadTasks();
+    } catch (error, stackTrace) {
+      _logger.severe('Error deleting task: $taskId', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 
-  Future<Task> createTask(Task task) async {
+  Future<void> addTask(Task task) async {
     try {
-      final newTask = await _repository.createTask(task);
+      // Check for overlaps before adding
+      final currentTasks = state.value ?? [];
+      final allTasks = [...currentTasks.map((b) => b.task).whereType<Task>(), task];
+      
+      // Sort and prevent overlaps
+      allTasks.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+      final adjustedTasks = _preventOverlaps(allTasks);
+      
+      // Find the adjusted version of our new task
+      final adjustedTask = adjustedTasks.firstWhere(
+        (t) => t.title == task.title && t.scheduledAt.day == task.scheduledAt.day,
+        orElse: () => task,
+      );
+      
+      await _repository.createTask(adjustedTask);
       
       // Reload tasks
-      final date = _ref.read(selectedDateProvider);
-      await loadTasksForDate(date);
+      await loadTasks();
+    } catch (error, stackTrace) {
+      _logger.severe('Error adding task: ${task.title}', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  Future<void> rescheduleTask(String taskId, DateTime newTime) async {
+    try {
+      final currentBlocks = state.value ?? [];
+      final taskBlock = currentBlocks.firstWhere(
+        (block) => block.task?.id == taskId,
+      );
       
-      return newTask;
-    } catch (error) {
-      state = AsyncValue.error(error, StackTrace.current);
-      rethrow;
+      if (taskBlock.task != null) {
+        final updatedTask = taskBlock.task!.copyWith(
+          scheduledAt: newTime,
+        );
+        
+        await updateTask(updatedTask);
+      }
+    } catch (error, stackTrace) {
+      _logger.severe('Error rescheduling task: $taskId', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 
@@ -187,12 +228,52 @@ class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
         energyRequired,
         date,
       );
-    } catch (error) {
-      state = AsyncValue.error(error, StackTrace.current);
+    } catch (error, stackTrace) {
+      _logger.severe('Error getting suggested time slots', error, stackTrace);
       return [];
     }
   }
 }
+
+// Helper providers
+final currentTaskProvider = Provider<Task?>((ref) {
+  final timeBlocks = ref.watch(timelineProvider).value ?? [];
+    
+  try {
+    final currentBlock = timeBlocks.firstWhere(
+      (block) => block.isCurrentBlock,
+    );
+    return currentBlock.task;
+  } catch (_) {
+    return null;
+  }
+});
+
+final nextTaskProvider = Provider<Task?>((ref) {
+  final timeBlocks = ref.watch(timelineProvider).value ?? [];
+  final now = DateTime.now();
+  
+  final futureBlocks = timeBlocks.where(
+    (block) => block.startTime.isAfter(now),
+  ).toList();
+  
+  if (futureBlocks.isEmpty) return null;
+  
+  futureBlocks.sort((a, b) => a.startTime.compareTo(b.startTime));
+  return futureBlocks.first.task;
+});
+
+final taskCountProvider = Provider<int>((ref) {
+  final timeBlocks = ref.watch(timelineProvider).value ?? [];
+  return timeBlocks.where((block) => block.task != null).length;
+});
+
+final completedTaskCountProvider = Provider<int>((ref) {
+  final timeBlocks = ref.watch(timelineProvider).value ?? [];
+  return timeBlocks.where(
+    (block) => block.task?.isCompleted ?? false,
+  ).length;
+});
 
 // Quick add task provider
 final quickAddTaskProvider = StateNotifierProvider<QuickAddTaskNotifier, AsyncValue<void>>((ref) {
@@ -203,6 +284,7 @@ final quickAddTaskProvider = StateNotifierProvider<QuickAddTaskNotifier, AsyncVa
 class QuickAddTaskNotifier extends StateNotifier<AsyncValue<void>> {
   final TimelineRepository _repository;
   final Ref _ref;
+  final _logger = Logger('QuickAddTaskNotifier');
 
   QuickAddTaskNotifier(this._repository, this._ref) : super(const AsyncValue.data(null));
 
@@ -229,6 +311,7 @@ class QuickAddTaskNotifier extends StateNotifier<AsyncValue<void>> {
         energyRequired: energyRequired,
         isCompleted: false,
         isFlexible: isFlexible,
+        tags: [],
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -239,8 +322,9 @@ class QuickAddTaskNotifier extends StateNotifier<AsyncValue<void>> {
       await _ref.read(timelineProvider.notifier).loadTasksForDate(scheduledAt);
       
       state = const AsyncValue.data(null);
-    } catch (error, stack) {
-      state = AsyncValue.error(error, stack);
+    } catch (error, stackTrace) {
+      _logger.severe('Error creating task: $title', error, stackTrace);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 }

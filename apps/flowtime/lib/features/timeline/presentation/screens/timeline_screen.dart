@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/timeline_provider.dart';
+import '../providers/date_provider.dart';
 import '../providers/energy_provider.dart';
 import '../widgets/timeline_header.dart';
 import '../widgets/energy_indicator.dart';

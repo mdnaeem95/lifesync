@@ -6,9 +6,13 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
+import 'core/utils/logger_config.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Configure logging
+  LoggerConfig.configure();
 
   final sharedPreferences = await SharedPreferences.getInstance();
 

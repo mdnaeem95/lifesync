@@ -14,6 +14,7 @@ class TaskMapper {
       energyRequired: model.energyRequired,
       isCompleted: model.isCompleted,
       isFlexible: model.isFlexible,
+      tags: _extractTags(model.metadata),
       completedAt: model.completedAt,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
@@ -22,6 +23,12 @@ class TaskMapper {
   }
 
   static TaskModel fromEntity(Task entity) {
+    // Store tags in metadata if not already there
+    final metadata = entity.metadata ?? {};
+    if (entity.tags.isNotEmpty && !metadata.containsKey('tags')) {
+      metadata['tags'] = entity.tags;
+    }
+
     return TaskModel(
       id: entity.id,
       title: entity.title,
@@ -36,7 +43,21 @@ class TaskMapper {
       completedAt: entity.completedAt,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
-      metadata: entity.metadata,
+      metadata: metadata,
     );
+  }
+
+  // Helper method to extract tags from metadata
+  static List<String> _extractTags(Map<String, dynamic>? metadata) {
+    if (metadata == null || !metadata.containsKey('tags')) {
+      return [];
+    }
+    
+    final tags = metadata['tags'];
+    if (tags is List) {
+      return tags.map((tag) => tag.toString()).toList();
+    }
+    
+    return [];
   }
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../providers/timeline_provider.dart';
+import '../providers/date_provider.dart';
 
 class TimelineHeader extends ConsumerWidget {
   final Function(DateTime) onDateChanged;
