@@ -8,11 +8,14 @@ import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_data_source.dart';
 import '../datasources/auth_remote_data_source.dart';
 import '../models/auth_token_model.dart';
+import 'package:logging/logging.dart';
+import '../../../../core/utils/logger_config.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final IAuthRemoteDataSource remoteDataSource;
   final IAuthLocalDataSource localDataSource;
   final LocalAuthentication localAuth;
+  final Logger _logger = LoggerConfig.getLogger('AuthRepository');
   
   final StreamController<User?> _authStateController = StreamController<User?>.broadcast();
   User? _currentUser;
@@ -69,6 +72,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
+    _logger.info('Processing sign in request');
     try {
       final authResponse = await remoteDataSource.signInWithEmail(
         email: email,
@@ -86,14 +90,18 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       
       _currentUser = authResponse.user.toEntity();
+      _logger.debug('Sign in response received, updating auth state');
       _authStateController.add(_currentUser);
       
       return Right(_currentUser!);
     } on ServerException catch (e) {
+      _logger.warning('Server exception during sign in: ${e.message}');
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
+      _logger.warning('Server exception during sign in: ${e.message}');
       return Left(CacheFailure(e.message));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during sign in', e, stackTrace);
       return Left(UnknownFailure(e.toString()));
     }
   }
@@ -104,6 +112,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     String? name,
   }) async {
+    _logger.info('Processing sign up request');
     try {
       final authResponse = await remoteDataSource.signUpWithEmail(
         email: email,
@@ -122,20 +131,24 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       
       _currentUser = authResponse.user.toEntity();
+      _logger.debug('Sign up response received, updating auth state');
       _authStateController.add(_currentUser);
       
       return Right(_currentUser!);
     } on ServerException catch (e) {
+      _logger.warning('Server exception during sign up: ${e.message}');
       return Left(ServerFailure(e.message));
     } on CacheException catch (e) {
       return Left(CacheFailure(e.message));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during sign up', e, stackTrace);
       return Left(UnknownFailure(e.toString()));
     }
   }
 
   @override
   Future<Either<Failure, User>> signInWithGoogle() async {
+    _logger.info('Processing Google sign in request');
     try {
       final authResponse = await remoteDataSource.signInWithGoogle();
 
@@ -150,18 +163,22 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       _currentUser = authResponse.user.toEntity();
+      _logger.debug('Google sign in response received, updating auth state');
       _authStateController.add(_currentUser);
 
       return Right(_currentUser!);
     } on ServerException catch (e) {
+      _logger.warning('Server exception during Google sign in: ${e.message}');
       return Left(ServerFailure(e.message));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during Google sign in', e, stackTrace);
       return Left(UnknownFailure(e.toString()));
     }
   }
 
   @override
   Future<Either<Failure, User>> signInWithApple() async {
+    
     try {
       final authResponse = await remoteDataSource.signInWithApple();
 
@@ -217,11 +234,21 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, void>> signOut() async {
+    _logger.info('Processing sign out request');
     try {
       // Note: signout endpoint returns 404, but we continue with local signout
       await remoteDataSource.signOut();
-    } catch (e) {
-      // Continue with local signout even if remote fails
+  
+      _logger.debug('Sign out successful, clearing auth state');
+      _authStateController.add(null);
+      
+      return const Right(null);
+    } on CacheException catch (e) {
+      _logger.warning('Cache exception during sign out: ${e.message}');
+      return Left(CacheFailure(e.message ?? 'Failed to sign out'));
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during sign out', e, stackTrace);
+      return Left(CacheFailure('Failed to sign out'));
     }
     
     await _clearAuthData();
@@ -230,23 +257,21 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, User>> getCurrentUser() async {
+    _logger.debug('Getting current user');
     try {
       if (_currentUser != null) {
+        _logger.debug('Current user found');
+        _authStateController.add(_currentUser);
         return Right(_currentUser!);
+      } else {
+        _logger.debug('No current user found');
+        _authStateController.add(null);
+        return Left(ServerFailure('No user found')); 
       }
-      
-      final tokens = await localDataSource.getTokens();
-      if (tokens != null && !tokens.isExpired) {
-        final cachedUser = await localDataSource.getCachedUser();
-        if (cachedUser != null) {
-          _currentUser = cachedUser.toEntity();
-          return Right(_currentUser!);
-        }
-      }
-      
-      return Left(CacheFailure('No user found'));
-    } catch (e) {
-      return Left(UnknownFailure(e.toString()));
+    } catch (e, stackTrace) {
+      _logger.error('Error getting current user', e, stackTrace);
+      _authStateController.add(null);
+      return Left(ServerFailure('Failed to get current user'));
     }
   }
 

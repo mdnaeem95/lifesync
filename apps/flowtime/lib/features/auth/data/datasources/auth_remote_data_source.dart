@@ -3,6 +3,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../../../../core/errors/exceptions.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:logging/logging.dart';
+import '../../../../core/utils/logger_config.dart';
 
 // Response model for auth endpoints
 class AuthResponse {
@@ -40,6 +42,7 @@ abstract class IAuthRemoteDataSource {
 class AuthRemoteDataSource implements IAuthRemoteDataSource {
   final Dio dio;
   static const String baseUrl = 'http://localhost:8000'; // API Gateway URL
+  final Logger _logger = LoggerConfig.getLogger('AuthRemoteDataSource');
   
   AuthRemoteDataSource({Dio? dio}) 
     : dio = dio ?? Dio(BaseOptions(
@@ -56,6 +59,7 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
     required String email,
     required String password,
   }) async {
+    _logger.info('Attempting sign in for user: ${email.replaceAll(RegExp(r'@.*'), '@***')}');
     try {
       final response = await dio.post(
         '/auth/signin',
@@ -66,11 +70,14 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
       
       if (response.statusCode == 200) {
+        _logger.info('Sign in successful for user: ${email.replaceAll(RegExp(r'@.*'), '@***')}');
         return AuthResponse.fromJson(response.data);
       } else {
+        _logger.warning('Sign in failed with status code: ${response.statusCode}');
         throw ServerException('Invalid credentials');
       }
     } on DioException catch (e) {
+      _logger.error('DioException during sign in', e, e.stackTrace);
       if (e.response?.statusCode == 401) {
         throw ServerException('Invalid email or password');
       } else if (e.type == DioExceptionType.connectionTimeout) {
@@ -78,7 +85,8 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       } else {
         throw ServerException('Server error: ${e.message}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during sign in', e, stackTrace);
       throw ServerException('Unexpected error: $e');
     }
   }
@@ -89,6 +97,7 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
     required String password,
     String? name,
   }) async {
+    _logger.info('Attempting sign up for user: ${email.replaceAll(RegExp(r'@.*'), '@***')}');
     try {
       final response = await dio.post(
         '/auth/signup',
@@ -100,25 +109,31 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
       
       if (response.statusCode == 200 || response.statusCode == 201) {
+        _logger.info('Sign up successful for user: ${email.replaceAll(RegExp(r'@.*'), '@***')}');
         return AuthResponse.fromJson(response.data);
       } else {
+        _logger.warning('Sign up failed with status code: ${response.statusCode}');
         throw ServerException('Failed to create account');
       }
     } on DioException catch (e) {
+      _logger.error('DioException during sign up', e, e.stackTrace);
       if (e.response?.statusCode == 409) {
         throw ServerException('Email already exists');
       } else {
         throw ServerException('Server error: ${e.message}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during sign up', e, stackTrace);
       throw ServerException('Unexpected error: $e');
     }
   }
   
   @override
   Future<AuthResponse> signInWithGoogle() async {
+    _logger.info('Attempting Google sign in');
     try {
       final googleSignIn = GoogleSignIn.instance;
+      _logger.debug('Starting Google sign in flow');
 
       // Optional: initialize (only needed if you need custom client IDs)
       // await googleSignIn.initialize();
@@ -127,13 +142,16 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       final account = await googleSignIn.authenticate();
 
       // Step 2: Get ID token
+      _logger.debug('Getting Google auth tokens');
       final auth = account.authentication;
       final idToken = auth.idToken;
       if (idToken == null) {
+        _logger.error('Google sign in failed: No ID token returned');
         throw ServerException('Google sign-in failed: No ID token returned');
       }
 
       // Step 3: Send ID token to backend
+      _logger.debug('Sending Google ID token to backend');
       final response = await dio.post(
         '/auth/google',
         data: {'id_token': idToken},
@@ -143,20 +161,26 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        _logger.info('Google sign in successful');
         return AuthResponse.fromJson(response.data);
       } else {
+        _logger.warning('Google sign in failed with status code: ${response.statusCode}');
         throw ServerException('Google sign-in failed: Backend error');
       }
     } on DioException catch (e) {
+      _logger.error('DioException during Google sign in', e, e.stackTrace);
       throw ServerException('Google sign-in network error: ${e.message}');
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during Google sign in', e, stackTrace);
       throw ServerException('Google sign-in failed: $e');
     }
   }
 
   @override
   Future<AuthResponse> signInWithApple() async {
+    _logger.info('Attempting Apple sign in');
     try {
+      _logger.debug('Requesting Apple ID credential');
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
@@ -168,9 +192,11 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       final idToken = credential.identityToken;
 
       if (idToken == null) {
+        _logger.error('Apple sign in failed: No identity token returned');
         throw ServerException('Apple sign in failed: No identity token returned');
       }
 
+      _logger.debug('Sending Apple ID token to backend');
       final response = await dio.post(
         '/auth/apple', // or your backend endpoint
         data: {'id_token': idToken},
@@ -178,17 +204,21 @@ class AuthRemoteDataSource implements IAuthRemoteDataSource {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        _logger.info('Apple sign in successful');
         return AuthResponse.fromJson(response.data);
       } else {
+        _logger.warning('Apple sign in failed with status code: ${response.statusCode}');
         throw ServerException('Apple sign in failed: Backend error');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.error('Unexpected error during Apple sign in', e, stackTrace);
       throw ServerException('Apple sign in failed: $e');
     }
   }
     
   @override
   Future<void> signOut() async {
+    _logger.info('Attempting sign out');
     try {
       await dio.post('/auth/signout');
     } catch (e) {

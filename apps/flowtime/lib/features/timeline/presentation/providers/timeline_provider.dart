@@ -172,31 +172,32 @@ class TimelineNotifier extends StateNotifier<AsyncValue<List<TimeBlock>>> {
   }
 
   Future<void> addTask(Task task) async {
-    try {
-      // Check for overlaps before adding
-      final currentTasks = state.value ?? [];
-      final allTasks = [...currentTasks.map((b) => b.task).whereType<Task>(), task];
-      
-      // Sort and prevent overlaps
-      allTasks.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-      final adjustedTasks = _preventOverlaps(allTasks);
-      
-      // Find the adjusted version of our new task
-      final adjustedTask = adjustedTasks.firstWhere(
-        (t) => t.title == task.title && t.scheduledAt.day == task.scheduledAt.day,
-        orElse: () => task,
-      );
-      
-      await _repository.createTask(adjustedTask);
-      
-      // Reload tasks
-      await loadTasks();
-    } catch (error, stackTrace) {
-      _logger.severe('Error adding task: ${task.title}', error, stackTrace);
-      state = AsyncValue.error(error, stackTrace);
+      try {
+        // Check for overlaps before adding
+        final currentTasks = state.value ?? [];
+        final allTasks = [...currentTasks.map((b) => b.task).whereType<Task>(), task];
+        
+        // Sort and prevent overlaps
+        allTasks.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+        final adjustedTasks = _preventOverlaps(allTasks);
+        
+        // Find the adjusted version of our new task
+        final adjustedTask = adjustedTasks.firstWhere(
+          (t) => t.title == task.title && t.scheduledAt.day == task.scheduledAt.day,
+          orElse: () => task,
+        );
+        
+        // Create the task and wait for response
+        final createdTask = await _repository.createTask(adjustedTask);
+        
+        // Force reload tasks for the specific date
+        await loadTasksForDate(createdTask.scheduledAt);
+      } catch (error, stackTrace) {
+        _logger.severe('Error adding task: ${task.title}', error, stackTrace);
+        state = AsyncValue.error(error, stackTrace);
+      }
     }
-  }
-
+    
   Future<void> rescheduleTask(String taskId, DateTime newTime) async {
     try {
       final currentBlocks = state.value ?? [];
