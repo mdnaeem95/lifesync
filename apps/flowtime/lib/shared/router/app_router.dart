@@ -6,8 +6,10 @@ import '../../features/auth/presentation/screens/signin_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/timeline/presentation/screens/timeline_screen.dart';
+import '../../features/timeline/presentation/screens/focus_mode_screen.dart';
 import '../../features/energy/presentation/screens/energy_dashboard_screen.dart';
 import '../../features/account/presentation/screens/account_screen.dart';
+import '../../features/timeline/domain/entities/task.dart';
 
 // Expose the router instance globally for navigation
 final routerProvider = Provider<GoRouter>((ref) {
@@ -71,10 +73,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/focus',
-        builder: (context, state) => Scaffold(
-          appBar: AppBar(title: const Text('Focus Mode')),
-          body: const Center(child: Text('Focus Mode - Coming Soon')),
-        ),
+        builder: (context, state) {
+          final task = state.extra as Task?;
+          return FocusModeScreen(task: task);
+        },
       ),
       GoRoute(
         path: '/insights',
