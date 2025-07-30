@@ -25,7 +25,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
     with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   late AnimationController _fabAnimationController;
-  int _currentIndex = 0;
   bool _isScrollControllerReady = false;
 
   @override
@@ -219,58 +218,69 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen>
   }
 
   Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDark,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index != _currentIndex) {
-            setState(() => _currentIndex = index);
-            switch (index) {
-              case 0:
-                break; // Already on timeline
-              case 1:
-                context.go('/energy');
-                break;
-              case 2:
-                context.go('/focus');
-                break;
-              case 3:
-                context.go('/insights');
-                break;
-            }
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.timeline),
-            label: 'Timeline',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bolt),
-            label: 'Energy',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.timer),
-            label: 'Focus',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.insights),
-            label: 'Insights',
-          ),
-        ],
-      ),
-    );
-  }
+  return Container(
+    decoration: BoxDecoration(
+      color: AppColors.surfaceDark,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.1),
+          blurRadius: 10,
+          offset: const Offset(0, -5),
+        ),
+      ],
+    ),
+    child: BottomNavigationBar(
+      type: BottomNavigationBarType.fixed, // Required for 5 items
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      currentIndex: 0, // Timeline is index 0
+      selectedItemColor: AppColors.primary,
+      unselectedItemColor: AppColors.textSecondary,
+      selectedFontSize: 12,
+      unselectedFontSize: 11,
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            break; // Already on timeline
+          case 1:
+            context.go('/energy');
+            break;
+          case 2:
+            context.go('/planning');
+            break;
+          case 3:
+            context.go('/insights');
+            break;
+          case 4:
+            context.go('/focus');
+            break;
+        }
+      },
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.timeline),
+          label: 'Timeline',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bolt),
+          label: 'Energy',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.calendar_view_week),
+          label: 'Planning',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.insights),
+          label: 'Insights',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.timer),
+          label: 'Focus',
+        ),
+      ],
+    ),
+  );
+}
 }
 
 // Task Details Sheet

@@ -76,7 +76,7 @@ class HeatmapPainter extends CustomPainter {
       
       for (int hour = startHour; hour <= endHour; hour++) {
         final energy = dayEnergy[hour] ?? 50;
-        final color = _getEnergyColor(energy).withOpacity(0.2 * opacity);
+        final color = _getEnergyColor(energy).withValues(alpha: 0.2 * opacity);
         
         final left = timeColumnWidth + (day * dayWidth);
         final top = (hour - startHour) * hourHeight;

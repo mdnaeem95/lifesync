@@ -173,7 +173,7 @@ class WeeklyPlanningNotifier extends StateNotifier<AsyncValue<WeeklyPlanningData
       if (day < 5) { // Weekdays only
         tasks.add(Task(
           id: 'week-$random-$day-1',
-          userId: 'user123',
+          tags: [],
           title: 'Deep Work Session',
           description: 'Focus on important project work',
           scheduledAt: dayStart.add(const Duration(hours: 9)),
@@ -192,7 +192,7 @@ class WeeklyPlanningNotifier extends StateNotifier<AsyncValue<WeeklyPlanningData
       if (day == 1 || day == 3) { // Tuesday and Thursday
         tasks.add(Task(
           id: 'week-$random-$day-2',
-          userId: 'user123',
+          tags: [],
           title: 'Team Standup',
           description: 'Daily sync with the team',
           scheduledAt: dayStart.add(const Duration(hours: 10, minutes: 30)),
@@ -210,7 +210,7 @@ class WeeklyPlanningNotifier extends StateNotifier<AsyncValue<WeeklyPlanningData
       // Admin tasks
       tasks.add(Task(
         id: 'week-$random-$day-3',
-        userId: 'user123',
+        tags: [],
         title: 'Email & Admin',
         description: 'Process emails and administrative tasks',
         scheduledAt: dayStart.add(const Duration(hours: 14)),
@@ -228,7 +228,7 @@ class WeeklyPlanningNotifier extends StateNotifier<AsyncValue<WeeklyPlanningData
       if (day < 5) {
         tasks.add(Task(
           id: 'week-$random-$day-4',
-          userId: 'user123',
+          tags: [],
           title: 'Lunch Break',
           description: 'Rest and recharge',
           scheduledAt: dayStart.add(const Duration(hours: 12)),
@@ -269,7 +269,7 @@ class WeeklyPlanningNotifier extends StateNotifier<AsyncValue<WeeklyPlanningData
         }
         // Post-lunch dip (1-3 PM)
         else if (hour >= 13 && hour <= 15) {
-          energy = 40 + (5 * (hour - 14).abs());
+          energy = 40 + (5 * (hour - 14).abs()).toDouble();
         }
         // Evening peak (4-6 PM)
         else if (hour >= 16 && hour <= 18) {

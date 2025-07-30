@@ -257,7 +257,7 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.8),
+        color: AppColors.surfaceDark.withOpacity(0.8),
         border: Border(
           bottom: BorderSide(
             color: AppColors.borderSubtle,
@@ -522,14 +522,21 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
         color: AppColors.surfaceDark,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: 4, // Weekly planning tab
+        type: BottomNavigationBarType.fixed, // Required for 5 items
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        currentIndex: 2, // Planning is index 2
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textSecondary,
+        selectedFontSize: 12,
+        unselectedFontSize: 11,
         onTap: (index) {
           _logger.fine('Bottom nav tapped: $index');
           switch (index) {
@@ -540,13 +547,13 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
               context.go('/energy');
               break;
             case 2:
-              context.go('/focus');
-              break;
+              break; // Already on planning
             case 3:
               context.go('/insights');
               break;
             case 4:
-              break; // Already on weekly planning
+              context.go('/focus');
+              break;
           }
         },
         items: const [
@@ -559,16 +566,16 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
             label: 'Energy',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.timer),
-            label: 'Focus',
+            icon: Icon(Icons.calendar_view_week),
+            label: 'Planning',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.insights),
             label: 'Insights',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_view_week),
-            label: 'Planning',
+            icon: Icon(Icons.timer),
+            label: 'Focus',
           ),
         ],
       ),

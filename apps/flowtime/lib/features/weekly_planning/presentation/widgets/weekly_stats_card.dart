@@ -23,13 +23,13 @@ class WeeklyStatsCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.primary.withOpacity(0.1),
-            AppColors.primary.withOpacity(0.05),
+            AppColors.primary.withValues(alpha: 0.1),
+            AppColors.primary.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.3),
+          color: AppColors.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Row(

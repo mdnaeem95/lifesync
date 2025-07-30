@@ -43,7 +43,7 @@ class TimeGrid extends StatelessWidget {
               bottom: 0,
               child: Container(
                 width: 1,
-                color: AppColors.borderSubtle.withOpacity(0.5),
+                color: AppColors.borderSubtle.withValues(alpha: 0.5),
               ),
             );
           }),
@@ -76,7 +76,7 @@ class TimeGrid extends StatelessWidget {
                   Expanded(
                     child: Container(
                       height: 1,
-                      color: AppColors.borderSubtle.withOpacity(0.3),
+                      color: AppColors.borderSubtle.withValues(alpha: 0.3),
                     ),
                   ),
                 ],

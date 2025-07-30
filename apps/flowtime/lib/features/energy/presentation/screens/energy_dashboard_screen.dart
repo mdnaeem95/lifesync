@@ -20,7 +20,6 @@ class EnergyDashboardScreen extends ConsumerStatefulWidget {
 class _EnergyDashboardScreenState extends ConsumerState<EnergyDashboardScreen> 
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  int _currentIndex = 1; // Energy tab
 
   @override
   void initState() {
@@ -270,23 +269,30 @@ class _EnergyDashboardScreenState extends ConsumerState<EnergyDashboardScreen>
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed, // Required for 5 items
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        currentIndex: 1, // Energy is index 1
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textSecondary,
+        selectedFontSize: 12,
+        unselectedFontSize: 11,
         onTap: (index) {
-          if (index != _currentIndex) {
-            setState(() => _currentIndex = index);
-            switch (index) {
-              case 0:
-                context.go('/timeline');
-                break;
-              case 1:
-                break; // Already on energy
-              case 2:
-                context.go('/focus');
-                break;
-              case 3:
-                context.go('/insights');
-                break;
-            }
+          switch (index) {
+            case 0:
+              context.go('/timeline');
+              break;
+            case 1:
+              break; // Already on energy
+            case 2:
+              context.go('/planning');
+              break;
+            case 3:
+              context.go('/insights');
+              break;
+            case 4:
+              context.go('/focus');
+              break;
           }
         },
         items: const [
@@ -299,12 +305,16 @@ class _EnergyDashboardScreenState extends ConsumerState<EnergyDashboardScreen>
             label: 'Energy',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.timer),
-            label: 'Focus',
+            icon: Icon(Icons.calendar_view_week),
+            label: 'Planning',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.insights),
             label: 'Insights',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.timer),
+            label: 'Focus',
           ),
         ],
       ),
