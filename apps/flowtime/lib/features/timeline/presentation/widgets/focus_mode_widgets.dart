@@ -58,10 +58,11 @@ class ProtocolPickerSheet extends StatelessWidget {
   final Function(FocusProtocol, int) onProtocolSelected;
   
   const ProtocolPickerSheet({
+    super.key,
     required this.selectedProtocol,
     required this.onProtocolSelected,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -202,6 +203,7 @@ class SessionCompletionDialog extends StatelessWidget {
   final VoidCallback onFinish;
   
   const SessionCompletionDialog({
+    super.key,
     required this.sessionDuration,
     required this.onContinue,
     required this.onFinish,

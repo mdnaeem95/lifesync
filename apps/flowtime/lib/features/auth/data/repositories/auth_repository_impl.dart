@@ -241,18 +241,16 @@ class AuthRepositoryImpl implements AuthRepository {
   
       _logger.debug('Sign out successful, clearing auth state');
       _authStateController.add(null);
+      await _clearAuthData();
       
       return const Right(null);
     } on CacheException catch (e) {
       _logger.warning('Cache exception during sign out: ${e.message}');
-      return Left(CacheFailure(e.message ?? 'Failed to sign out'));
+      return Left(CacheFailure(e.message));
     } catch (e, stackTrace) {
       _logger.error('Unexpected error during sign out', e, stackTrace);
       return Left(CacheFailure('Failed to sign out'));
     }
-    
-    await _clearAuthData();
-    return const Right(null);
   }
 
   @override
@@ -288,21 +286,4 @@ class AuthRepositoryImpl implements AuthRepository {
   void dispose() {
     _authStateController.close();
   }
-}
-
-// Additional Failure classes
-class ServerFailure extends Failure {
-  ServerFailure(super.message);
-}
-
-class CacheFailure extends Failure {
-  CacheFailure(super.message);
-}
-
-class BiometricFailure extends Failure {
-  BiometricFailure(super.message);
-}
-
-class UnknownFailure extends Failure {
-  UnknownFailure(super.message);
 }

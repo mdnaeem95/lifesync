@@ -8,6 +8,9 @@ class AppColors {
   
   // Task type colors
   static const Color focus = Color(0xFF3B82F6);
+  static const Color meeting = Color(0xFF0EA5E9);    // Soft blue-teal
+  static const Color admin = Color(0xFF6366F1);      // Muted indigo (uses your primary)
+  static const Color breakTask = Color(0xFFFAE8B7);
   static const Color success = Color(0xFF10B981);
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);

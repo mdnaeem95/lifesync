@@ -30,13 +30,13 @@ class AIInsightsCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            _getInsightColor(insight.type).withOpacity(0.1),
-            _getInsightColor(insight.type).withOpacity(0.05),
+            _getInsightColor(insight.type).withValues(alpha: 0.1),
+            _getInsightColor(insight.type).withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _getInsightColor(insight.type).withOpacity(0.3),
+          color: _getInsightColor(insight.type).withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -63,7 +63,7 @@ class AIInsightsCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(

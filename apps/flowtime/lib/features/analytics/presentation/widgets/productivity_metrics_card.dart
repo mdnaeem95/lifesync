@@ -23,12 +23,12 @@ class ProductivityMetricsCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.primary.withOpacity(0.1),
-            AppColors.primary.withOpacity(0.05),
+            AppColors.primary.withValues(alpha: 0.1),
+            AppColors.primary.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,7 +48,7 @@ class ProductivityMetricsCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${metrics.productivityScore.toStringAsFixed(1)}',
+                    metrics.productivityScore.toStringAsFixed(1),
                     style: const TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
@@ -63,7 +63,7 @@ class ProductivityMetricsCard extends StatelessWidget {
           const SizedBox(height: 24),
           _buildMetricRow('Completion Rate', '${metrics.completionRate.toStringAsFixed(1)}%', AppColors.success),
           const SizedBox(height: 12),
-          _buildMetricRow('Focus Score', '${metrics.focusScore.toStringAsFixed(1)}', AppColors.primary),
+          _buildMetricRow('Focus Score', metrics.focusScore.toStringAsFixed(1), AppColors.primary),
           const SizedBox(height: 12),
           _buildMetricRow('Avg Task Duration', '${metrics.averageTaskDuration} min', AppColors.warning),
           const SizedBox(height: 12),
@@ -115,7 +115,7 @@ class ProductivityMetricsCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

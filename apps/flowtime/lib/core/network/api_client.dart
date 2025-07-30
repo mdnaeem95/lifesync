@@ -74,7 +74,9 @@ class ApiClient {
                     await _storage.saveRefreshToken(newRefreshToken);
                     
                     // Retry failed requests
-                    _failedQueue.forEach((callback) => callback());
+                    for (final callback in _failedQueue) {
+                      callback();
+                    }
                     _failedQueue.clear();
                     
                     // Retry original request

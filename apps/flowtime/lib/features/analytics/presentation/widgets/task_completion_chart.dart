@@ -66,7 +66,7 @@ class TaskCompletionChart extends StatelessWidget {
           child: Container(
             width: 60,
             decoration: BoxDecoration(
-              color: metrics.typeColor.withOpacity(0.2),
+              color: metrics.typeColor.withValues(alpha: 0.2),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
               border: Border.all(color: metrics.typeColor, width: 2),
             ),

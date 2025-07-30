@@ -75,7 +75,7 @@ class _EnergyPatternChartState extends State<EnergyPatternChart>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.2),
+                  color: AppColors.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -172,8 +172,8 @@ class EnergyChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppColors.primary.withOpacity(0.3),
-          AppColors.primary.withOpacity(0.0),
+          AppColors.primary.withValues(alpha: 0.3),
+          AppColors.primary.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
@@ -243,7 +243,7 @@ class EnergyChartPainter extends CustomPainter {
 
   void _drawGrid(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = AppColors.borderSubtle.withOpacity(0.3)
+      ..color = AppColors.borderSubtle.withValues(alpha: 0.3)
       ..strokeWidth = 1;
 
     // Horizontal lines
