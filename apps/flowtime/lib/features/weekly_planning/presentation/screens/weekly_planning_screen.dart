@@ -75,7 +75,12 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
       if (_showEnergyHeatmap) {
         _heatmapAnimationController.forward();
       }
-      _scrollToCurrentTime();
+      // Delay scroll to current time to ensure ScrollViews are built
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _scrollToCurrentTime();
+        }
+      });
     });
   }
 
@@ -96,25 +101,32 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
     
     _logger.fine('Scrolling to current time: Day $currentDayIndex, Hour $currentHour');
     
-    // Scroll horizontally to current day
-    if (_horizontalScrollController.hasClients) {
-      final horizontalOffset = currentDayIndex * _dayWidth;
-      _horizontalScrollController.animateTo(
-        horizontalOffset.clamp(0.0, _horizontalScrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      );
-    }
-    
-    // Scroll vertically to current hour
-    if (_verticalScrollController.hasClients) {
-      final verticalOffset = (currentHour - _startHour) * _hourHeight;
-      _verticalScrollController.animateTo(
-        verticalOffset.clamp(0.0, _verticalScrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    // Add additional delay to ensure ScrollViews are built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Scroll horizontally to current day
+      if (_horizontalScrollController.hasClients) {
+        final horizontalOffset = currentDayIndex * _dayWidth;
+        _horizontalScrollController.animateTo(
+          horizontalOffset.clamp(0.0, _horizontalScrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _logger.warning('Horizontal scroll controller not attached');
+      }
+      
+      // Scroll vertically to current hour
+      if (_verticalScrollController.hasClients) {
+        final verticalOffset = (currentHour - _startHour) * _hourHeight;
+        _verticalScrollController.animateTo(
+          verticalOffset.clamp(0.0, _verticalScrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _logger.warning('Vertical scroll controller not attached');
+      }
+    });
   }
 
   void _handleTaskDragStart(Task task, Offset globalPosition) {
@@ -177,9 +189,17 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
     
     final localPosition = gridBox.globalToLocal(globalPosition);
     
+    // Check if scroll controllers are attached
+    final horizontalOffset = _horizontalScrollController.hasClients 
+        ? _horizontalScrollController.offset 
+        : 0.0;
+    final verticalOffset = _verticalScrollController.hasClients 
+        ? _verticalScrollController.offset 
+        : 0.0;
+    
     // Account for scroll offset and grid margins
-    final adjustedX = localPosition.dx + _horizontalScrollController.offset - _timeColumnWidth;
-    final adjustedY = localPosition.dy + _verticalScrollController.offset - 100; // Header height
+    final adjustedX = localPosition.dx + horizontalOffset - _timeColumnWidth;
+    final adjustedY = localPosition.dy + verticalOffset - 100; // Header height
     
     // Calculate day and hour
     final dayIndex = (adjustedX / _dayWidth).floor();
@@ -394,31 +414,41 @@ class _WeeklyPlanningScreenState extends ConsumerState<WeeklyPlanningScreen>
     final top = ((currentHour - _startHour) * _hourHeight) + 
                 (currentMinute / 60 * _hourHeight);
     
-    return Positioned(
-      left: left,
-      top: top - _verticalScrollController.offset,
-      child: Container(
-        width: _dayWidth,
-        height: 2,
-        color: AppColors.error,
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: AppColors.error,
-                shape: BoxShape.circle,
-              ),
+    return AnimatedBuilder(
+      animation: _verticalScrollController,
+      builder: (context, child) {
+        // Only show indicator if scroll controller is attached
+        if (!_verticalScrollController.hasClients) {
+          return const SizedBox.shrink();
+        }
+        
+        return Positioned(
+          left: left,
+          top: top - _verticalScrollController.offset,
+          child: Container(
+            width: _dayWidth,
+            height: 2,
+            color: AppColors.error,
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ).animate(
-        onPlay: (controller) => controller.repeat(),
-      ).fadeIn().then().fadeOut(
-        duration: 1.seconds,
-        curve: Curves.easeInOut,
-      ),
+          ).animate(
+            onPlay: (controller) => controller.repeat(),
+          ).fadeIn().then().fadeOut(
+            duration: 1.seconds,
+            curve: Curves.easeInOut,
+          ),
+        );
+      },
     );
   }
 
