@@ -7,24 +7,16 @@ import (
 )
 
 type AuthConfig struct {
-	// Server
-	Port        int
-	Environment string
-	Version     string
-
-	// Database
-	DatabaseURL string
-
-	// JWT
-	JWTSecret string
-
-	// CORS
-	AllowedOrigins []string
-
-	// Rate Limiting
+	Environment        string
+	Version            string
+	Port               int
+	DatabaseURL        string
+	JWTSecret          string
+	LogLevel           string
 	RateLimitPerMinute int
+	AllowedOrigins     []string
 
-	// Email (for future use)
+	// Email configuration (optional)
 	SMTPHost     string
 	SMTPPort     int
 	SMTPUser     string
@@ -33,36 +25,43 @@ type AuthConfig struct {
 }
 
 func LoadAuthConfig() *AuthConfig {
-	return &AuthConfig{
-		Port:        getEnvAsInt("AUTH_SERVICE_PORT", 8080),
-		Environment: getEnv("ENVIRONMENT", "development"),
-		Version:     getEnv("SERVICE_VERSION", "1.0.0"),
-
-		DatabaseURL: getEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/lifesync?sslmode=disable"),
-		JWTSecret:   getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
-
-		AllowedOrigins:     parseAllowedOrigins(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")),
+	cfg := &AuthConfig{
+		Environment:        getEnv("ENVIRONMENT", "development"),
+		Version:            getEnv("SERVICE_VERSION", "1.0.0"),
+		Port:               getEnvAsInt("AUTH_SERVICE_PORT", 8080),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/lifesync?sslmode=disable"),
+		JWTSecret:          getEnv("JWT_SECRET", "development-secret-key"),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		RateLimitPerMinute: getEnvAsInt("RATE_LIMIT_PER_MINUTE", 5),
+		AllowedOrigins:     getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 
+		// Email configuration
 		SMTPHost:     getEnv("SMTP_HOST", ""),
 		SMTPPort:     getEnvAsInt("SMTP_PORT", 587),
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		FromEmail:    getEnv("FROM_EMAIL", "noreply@flowtime.app"),
 	}
+
+	return cfg
 }
 
+// GetSafeConfig returns config with sensitive values redacted
 func (c *AuthConfig) GetSafeConfig() map[string]interface{} {
 	return map[string]interface{}{
-		"port":            c.Port,
 		"environment":     c.Environment,
 		"version":         c.Version,
-		"allowed_origins": c.AllowedOrigins,
+		"port":            c.Port,
+		"database_url":    redactConnectionString(c.DatabaseURL),
+		"jwt_secret":      redact(c.JWTSecret),
+		"log_level":       c.LogLevel,
 		"rate_limit":      c.RateLimitPerMinute,
+		"allowed_origins": c.AllowedOrigins,
 		"smtp_configured": c.SMTPHost != "",
 	}
 }
 
+// Helper functions
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -71,32 +70,33 @@ func getEnv(key, defaultValue string) string {
 }
 
 func getEnvAsInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
+	valueStr := getEnv(key, "")
+	if value, err := strconv.Atoi(valueStr); err == nil {
+		return value
 	}
 	return defaultValue
 }
 
-func parseAllowedOrigins(originsStr string) []string {
-	origins := strings.Split(originsStr, ",")
-	result := make([]string, 0, len(origins))
-	for _, origin := range origins {
-		trimmed := strings.TrimSpace(origin)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	valueStr := getEnv(key, "")
+	if valueStr == "" {
+		return defaultValue
 	}
-	// Add common Flutter development ports
-	flutterPorts := []string{
-		"http://localhost:50000",
-		"http://localhost:50001",
-		"http://localhost:50002",
-		"http://localhost:50003",
-		"http://localhost:50004",
-		"http://localhost:50005",
+	return strings.Split(valueStr, ",")
+}
+
+func redact(value string) string {
+	if len(value) == 0 {
+		return ""
 	}
-	result = append(result, flutterPorts...)
-	return result
+	return "***"
+}
+
+func redactConnectionString(connStr string) string {
+	// Simple redaction - in production, use more sophisticated parsing
+	if strings.Contains(connStr, "@") {
+		parts := strings.Split(connStr, "@")
+		return "***@" + parts[len(parts)-1]
+	}
+	return redact(connStr)
 }

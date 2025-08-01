@@ -71,8 +71,6 @@ func (s *authService) SignUp(ctx context.Context, req models.SignUpRequest) (*mo
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	log.WithField("user_id", createdUser.ID).Info("User created successfully")
-
 	// Generate tokens
 	accessToken, err := s.jwtService.GenerateAccessToken(createdUser.ID, createdUser.Email)
 	if err != nil {
@@ -89,16 +87,15 @@ func (s *authService) SignUp(ctx context.Context, req models.SignUpRequest) (*mo
 	// Store refresh token
 	if err := s.userRepo.StoreRefreshToken(ctx, createdUser.ID, refreshToken, 30*24*time.Hour); err != nil {
 		log.WithError(err).Error("Failed to store refresh token")
-		// Continue anyway - user is created
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
-	// TODO: Send verification email
-	// s.emailService.SendVerificationEmail(createdUser.Email, verificationToken)
+	log.WithField("user_id", createdUser.ID).Info("User successfully created")
 
 	return &models.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    3600, // 1 hour
+		ExpiresIn:    3600, // 1 hour in seconds
 		User:         createdUser.ToPublicUser(),
 	}, nil
 }
@@ -109,23 +106,21 @@ func (s *authService) SignIn(ctx context.Context, req models.SignInRequest) (*mo
 	// Get user by email
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		log.WithField("email", req.Email).Warn("User not found")
+		log.WithField("email", req.Email).Debug("User not found")
 		return nil, errors.New("invalid credentials")
 	}
 
-	// Check password
+	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		log.WithField("user_id", user.ID).Warn("Invalid password")
+		log.WithField("email", req.Email).Debug("Invalid password")
 		return nil, errors.New("invalid credentials")
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		log.WithField("user_id", user.ID).Warn("Inactive user attempting to sign in")
+		log.WithField("email", req.Email).Warn("Inactive user attempted to sign in")
 		return nil, errors.New("account is inactive")
 	}
-
-	log.WithField("user_id", user.ID).Info("User authenticated successfully")
 
 	// Generate tokens
 	accessToken, err := s.jwtService.GenerateAccessToken(user.ID, user.Email)
@@ -143,19 +138,21 @@ func (s *authService) SignIn(ctx context.Context, req models.SignInRequest) (*mo
 	// Store refresh token
 	if err := s.userRepo.StoreRefreshToken(ctx, user.ID, refreshToken, 30*24*time.Hour); err != nil {
 		log.WithError(err).Error("Failed to store refresh token")
-		// Continue anyway
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
 	// Update last login
 	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
 		log.WithError(err).Warn("Failed to update last login")
-		// Non-critical error
+		// Don't fail the login for this
 	}
+
+	log.WithField("user_id", user.ID).Info("User successfully signed in")
 
 	return &models.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    3600, // 1 hour
+		ExpiresIn:    3600, // 1 hour in seconds
 		User:         user.ToPublicUser(),
 	}, nil
 }
@@ -166,34 +163,31 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*m
 	// Validate refresh token
 	claims, err := s.jwtService.ValidateRefreshToken(refreshToken)
 	if err != nil {
-		log.WithError(err).Warn("Invalid refresh token")
+		log.WithError(err).Debug("Invalid refresh token")
 		return nil, errors.New("invalid refresh token")
 	}
 
-	// Check if token is stored (not revoked)
+	// Check if refresh token is valid in database
 	valid, err := s.userRepo.ValidateRefreshToken(ctx, claims.UserID, refreshToken)
 	if err != nil || !valid {
-		log.WithField("user_id", claims.UserID).Warn("Refresh token not found or revoked")
+		log.WithField("user_id", claims.UserID).Debug("Refresh token not found in database")
 		return nil, errors.New("invalid refresh token")
 	}
 
-	// Get user to ensure they still exist and are active
+	// Get user
 	user, err := s.userRepo.GetByID(ctx, claims.UserID)
-	if err != nil || !user.IsActive {
-		log.WithField("user_id", claims.UserID).Warn("User not found or inactive")
-		return nil, errors.New("invalid refresh token")
+	if err != nil {
+		log.WithError(err).Error("Failed to get user")
+		return nil, errors.New("user not found")
 	}
 
-	log.WithField("user_id", user.ID).Info("Generating new tokens")
-
-	// Generate new access token
+	// Generate new tokens
 	newAccessToken, err := s.jwtService.GenerateAccessToken(user.ID, user.Email)
 	if err != nil {
 		log.WithError(err).Error("Failed to generate new access token")
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	// Generate new refresh token
 	newRefreshToken, err := s.jwtService.GenerateRefreshToken(user.ID)
 	if err != nil {
 		log.WithError(err).Error("Failed to generate new refresh token")
@@ -209,13 +203,15 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*m
 	// Store new refresh token
 	if err := s.userRepo.StoreRefreshToken(ctx, user.ID, newRefreshToken, 30*24*time.Hour); err != nil {
 		log.WithError(err).Error("Failed to store new refresh token")
-		// Continue anyway
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
+
+	log.WithField("user_id", user.ID).Info("Tokens successfully refreshed")
 
 	return &models.TokenResponse{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
-		ExpiresIn:    3600, // 1 hour
+		ExpiresIn:    3600, // 1 hour in seconds
 	}, nil
 }
 
@@ -225,36 +221,35 @@ func (s *authService) SignOut(ctx context.Context, userID, refreshToken string) 
 		"user_id":   userID,
 	})
 
-	// Revoke refresh token if provided
+	// Revoke the specific refresh token if provided
 	if refreshToken != "" {
 		if err := s.userRepo.RevokeRefreshToken(ctx, userID, refreshToken); err != nil {
 			log.WithError(err).Warn("Failed to revoke refresh token")
-			// Continue anyway - user is still logged out
+			// Continue anyway
+		}
+	} else {
+		// Revoke all refresh tokens for the user
+		if err := s.userRepo.RevokeAllRefreshTokens(ctx, userID); err != nil {
+			log.WithError(err).Warn("Failed to revoke all refresh tokens")
+			// Continue anyway
 		}
 	}
 
-	// Could also blacklist the access token here if needed
-	// s.tokenBlacklist.Add(accessToken)
-
-	log.Info("User signed out successfully")
+	log.Info("User successfully signed out")
 	return nil
 }
 
 func (s *authService) VerifyEmail(ctx context.Context, token string) error {
 	log := s.log.WithContext(ctx).WithField("operation", "verify_email")
 
-	// Validate verification token
-	// TODO: Implement token validation logic
-	userID := "" // Extract from token
+	// TODO: Implement email verification logic
+	// This would typically:
+	// 1. Validate the email verification token
+	// 2. Mark the user's email as verified
+	// 3. Delete the verification token
 
-	// Mark email as verified
-	if err := s.userRepo.MarkEmailVerified(ctx, userID); err != nil {
-		log.WithError(err).Error("Failed to mark email as verified")
-		return fmt.Errorf("failed to verify email: %w", err)
-	}
-
-	log.WithField("user_id", userID).Info("Email verified successfully")
-	return nil
+	log.Warn("Email verification not implemented")
+	return errors.New("email verification not implemented")
 }
 
 func (s *authService) RequestPasswordReset(ctx context.Context, email string) error {
@@ -266,42 +261,48 @@ func (s *authService) RequestPasswordReset(ctx context.Context, email string) er
 	// Get user by email
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		// Don't reveal if email exists
-		log.WithField("email", email).Info("Password reset requested for non-existent email")
+		// Don't reveal if user exists or not
+		log.WithField("email", email).Debug("User not found for password reset")
 		return nil
 	}
 
 	// Generate reset token
-	resetToken := generateSecureToken()
-	expiresAt := time.Now().Add(1 * time.Hour)
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		log.WithError(err).Error("Failed to generate reset token")
+		return fmt.Errorf("failed to generate reset token: %w", err)
+	}
+	resetToken := hex.EncodeToString(tokenBytes)
 
-	// Store reset token
+	// Store reset token with 1 hour expiry
+	expiresAt := time.Now().Add(1 * time.Hour)
 	if err := s.userRepo.StorePasswordResetToken(ctx, user.ID, resetToken, expiresAt); err != nil {
-		log.WithError(err).Error("Failed to store password reset token")
-		return fmt.Errorf("failed to process password reset: %w", err)
+		log.WithError(err).Error("Failed to store reset token")
+		return fmt.Errorf("failed to store reset token: %w", err)
 	}
 
-	// TODO: Send password reset email
-	// s.emailService.SendPasswordResetEmail(user.Email, resetToken)
+	// TODO: Send reset email
+	// This would typically send an email with a link like:
+	// https://app.flowtime.ai/reset-password?token=resetToken
 
-	log.WithField("user_id", user.ID).Info("Password reset email sent")
+	log.WithField("user_id", user.ID).Info("Password reset requested")
 	return nil
 }
 
 func (s *authService) ResetPassword(ctx context.Context, token, newPassword string) error {
 	log := s.log.WithContext(ctx).WithField("operation", "reset_password")
 
-	// Validate reset token
+	// Validate reset token and get user ID
 	userID, err := s.userRepo.ValidatePasswordResetToken(ctx, token)
 	if err != nil {
-		log.Warn("Invalid or expired password reset token")
+		log.WithError(err).Debug("Invalid reset token")
 		return errors.New("invalid or expired reset token")
 	}
 
 	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		log.WithError(err).Error("Failed to hash password")
+		log.WithError(err).Error("Failed to hash new password")
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
@@ -313,24 +314,16 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 
 	// Revoke all refresh tokens for security
 	if err := s.userRepo.RevokeAllRefreshTokens(ctx, userID); err != nil {
-		log.WithError(err).Warn("Failed to revoke refresh tokens")
+		log.WithError(err).Warn("Failed to revoke refresh tokens after password reset")
 		// Continue anyway
 	}
 
-	// Delete reset token
+	// Delete the used reset token
 	if err := s.userRepo.DeletePasswordResetToken(ctx, token); err != nil {
-		log.WithError(err).Warn("Failed to delete reset token")
+		log.WithError(err).Warn("Failed to delete used reset token")
 		// Continue anyway
 	}
 
-	log.WithField("user_id", userID).Info("Password reset successfully")
+	log.WithField("user_id", userID).Info("Password successfully reset")
 	return nil
-}
-
-func generateSecureToken() string {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(bytes)
 }

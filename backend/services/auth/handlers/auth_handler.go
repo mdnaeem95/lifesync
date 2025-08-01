@@ -13,15 +13,15 @@ import (
 
 type AuthHandler struct {
 	authService services.AuthService
-	validator   *validator.Validate
 	log         logger.Logger
+	validator   *validator.Validate
 }
 
 func NewAuthHandler(authService services.AuthService, log logger.Logger) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
-		validator:   validator.New(),
 		log:         log,
+		validator:   validator.New(),
 	}
 }
 
@@ -50,7 +50,7 @@ func (h *AuthHandler) SignUp(c *gin.Context) {
 	response, err := h.authService.SignUp(ctx, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
-			log.WithField("email", req.Email).Warn("Signup failed: user already exists")
+			log.WithField("email", req.Email).Warn("User already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 			return
 		}
@@ -121,22 +121,24 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	// Validate request
+	if err := h.validator.Struct(req); err != nil {
+		log.WithError(err).Warn("Refresh token validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed", "details": err.Error()})
+		return
+	}
+
 	log.Info("Processing refresh token request")
 
 	// Refresh tokens
 	response, err := h.authService.RefreshToken(ctx, req.RefreshToken)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "expired") {
-			log.Warn("Refresh token failed: invalid or expired token")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
-			return
-		}
-		log.WithError(err).Error("Refresh token failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh token"})
+		log.WithError(err).Warn("Token refresh failed")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
 	}
 
-	log.Info("Token successfully refreshed")
+	log.Info("Tokens successfully refreshed")
 	c.JSON(http.StatusOK, response)
 }
 
@@ -146,28 +148,23 @@ func (h *AuthHandler) SignOut(c *gin.Context) {
 	log := h.log.WithContext(ctx)
 
 	// Get user ID from context (set by auth middleware)
-	userID, exists := c.Get("user_id")
+	userID, exists := c.Get("userID")
 	if !exists {
 		log.Error("User ID not found in context")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication error"})
 		return
 	}
+
+	var req models.SignOutRequest
+	// Ignore error as refresh token is optional
+	_ = c.ShouldBindJSON(&req)
 
 	log.WithField("user_id", userID).Info("Processing signout request")
 
-	// Get refresh token from request
-	var req models.SignOutRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// Sign out without refresh token (just invalidate access token)
-		log.WithField("user_id", userID).Info("User signed out (no refresh token)")
-		c.JSON(http.StatusOK, gin.H{"message": "Successfully signed out"})
-		return
-	}
-
-	// Invalidate refresh token
+	// Sign out user
 	if err := h.authService.SignOut(ctx, userID.(string), req.RefreshToken); err != nil {
-		log.WithError(err).Error("Failed to invalidate refresh token")
-		// Still return success as the user is effectively logged out
+		log.WithError(err).Warn("Signout failed")
+		// Continue anyway - user should be signed out
 	}
 
 	log.WithField("user_id", userID).Info("User successfully signed out")
@@ -181,26 +178,21 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 
 	token := c.Param("token")
 	if token == "" {
-		log.Warn("Email verification failed: missing token")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing verification token"})
+		log.Warn("Missing verification token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification token required"})
 		return
 	}
 
-	log.WithField("token", token[:10]+"...").Info("Processing email verification")
+	log.Info("Processing email verification")
 
 	if err := h.authService.VerifyEmail(ctx, token); err != nil {
-		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "expired") {
-			log.Warn("Email verification failed: invalid or expired token")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired verification token"})
-			return
-		}
-		log.WithError(err).Error("Email verification failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify email"})
+		log.WithError(err).Warn("Email verification failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired verification token"})
 		return
 	}
 
 	log.Info("Email successfully verified")
-	c.JSON(http.StatusOK, gin.H{"message": "Email successfully verified"})
+	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
 }
 
 // RequestPasswordReset handles password reset requests
@@ -215,13 +207,21 @@ func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 		return
 	}
 
-	log.WithField("email", req.Email).Info("Processing password reset request")
-
-	// Always return success to prevent email enumeration
-	if err := h.authService.RequestPasswordReset(ctx, req.Email); err != nil {
-		log.WithError(err).Error("Password reset request failed")
+	// Validate request
+	if err := h.validator.Struct(req); err != nil {
+		log.WithError(err).Warn("Password reset validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed", "details": err.Error()})
+		return
 	}
 
+	log.WithField("email", req.Email).Info("Processing password reset request")
+
+	if err := h.authService.RequestPasswordReset(ctx, req.Email); err != nil {
+		log.WithError(err).Error("Password reset request failed")
+		// Don't reveal if email exists or not
+	}
+
+	// Always return success to prevent email enumeration
 	c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link has been sent"})
 }
 
@@ -232,8 +232,8 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 
 	token := c.Param("token")
 	if token == "" {
-		log.Warn("Password reset failed: missing token")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing reset token"})
+		log.Warn("Missing reset token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Reset token required"})
 		return
 	}
 
@@ -244,19 +244,21 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	log.WithField("token", token[:10]+"...").Info("Processing password reset")
+	// Validate request
+	if err := h.validator.Struct(req); err != nil {
+		log.WithError(err).Warn("Reset password validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed", "details": err.Error()})
+		return
+	}
+
+	log.Info("Processing password reset")
 
 	if err := h.authService.ResetPassword(ctx, token, req.NewPassword); err != nil {
-		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "expired") {
-			log.Warn("Password reset failed: invalid or expired token")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
-			return
-		}
-		log.WithError(err).Error("Password reset failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
+		log.WithError(err).Warn("Password reset failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
 		return
 	}
 
 	log.Info("Password successfully reset")
-	c.JSON(http.StatusOK, gin.H{"message": "Password successfully reset"})
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
