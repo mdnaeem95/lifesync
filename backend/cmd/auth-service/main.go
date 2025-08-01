@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/mdnaeem95/lifesync/backend/internal/config"
 	"github.com/mdnaeem95/lifesync/backend/internal/middleware"
 	"github.com/mdnaeem95/lifesync/backend/pkg/database"
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	// Initialize logger
-	log := logger.New("auth-service")
+	log := logger.New()
 	log.Info("Starting FlowTime Auth Service")
 
 	// Load configuration
