@@ -20,9 +20,10 @@ try {
 
 # Test 2: Auth Service through Gateway (No Auth Required)
 Write-Host "`n2. Testing Auth Service (Sign Up)..." -ForegroundColor Yellow
+$testEmail = "gateway-test-$(Get-Random)@example.com"
 try {
     $signupBody = @{
-        email = "gateway-test-$(Get-Random)@example.com"
+        email = $testEmail
         password = "password123"
         name = "Gateway Test User"
     } | ConvertTo-Json
@@ -33,13 +34,14 @@ try {
         -Body $signupBody
     
     Write-Host "[OK] Sign up successful" -ForegroundColor Green
-    $token = $signup.access_token
+    Write-Host "  Created user: $testEmail" -ForegroundColor Gray
 } catch {
     Write-Host "[ERR] Sign up failed: $_" -ForegroundColor Red
 }
 
 # Test 3: Sign In through Gateway
 Write-Host "`n3. Testing Sign In..." -ForegroundColor Yellow
+$token = $null
 try {
     $signinBody = @{
         email = "test@example.com"
@@ -53,8 +55,28 @@ try {
     
     Write-Host "[OK] Sign in successful" -ForegroundColor Green
     $token = $signin.access_token
+    Write-Host "  Token received: $($token.Substring(0, 20))..." -ForegroundColor Gray
 } catch {
     Write-Host "[ERR] Sign in failed: $_" -ForegroundColor Red
+    
+    # Try with the newly created user
+    Write-Host "  Trying with newly created user..." -ForegroundColor Yellow
+    try {
+        $signinBody = @{
+            email = $testEmail
+            password = "password123"
+        } | ConvertTo-Json
+
+        $signin = Invoke-RestMethod -Uri "$gatewayUrl/api/v1/auth/signin" `
+            -Method POST `
+            -ContentType "application/json" `
+            -Body $signinBody
+        
+        Write-Host "  [OK] Sign in successful with new user" -ForegroundColor Green
+        $token = $signin.access_token
+    } catch {
+        Write-Host "  [ERR] Sign in with new user also failed: $_" -ForegroundColor Red
+    }
 }
 
 # Test 4: Protected Endpoint (Tasks) - Should Require Auth
@@ -176,7 +198,7 @@ try {
     Write-Host "  Active requests: $($metrics.ActiveRequests)" -ForegroundColor Gray
     Write-Host "  Total endpoints tracked: $($metrics.RequestCount.Count)" -ForegroundColor Gray
 } catch {
-    Write-Host "[ERR] Metrics test failed: $($_ | Out-String)" -ForegroundColor Red
+    Write-Host "[ERR] Metrics test failed: $_" -ForegroundColor Red
 }
 
 # Test 10: Invalid Service Request

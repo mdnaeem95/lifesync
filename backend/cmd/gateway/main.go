@@ -1,3 +1,4 @@
+// File: services/gateway/cmd/main.go
 package main
 
 import (
@@ -6,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -56,10 +58,6 @@ func main() {
 
 	// Setup router
 	router := setupRouter(cfg, serviceDiscovery, proxyHandler, rateLimiter, jwtService, log)
-
-	for _, ri := range router.Routes() {
-		fmt.Printf("[ROUTE] %s %s -> %s\n", ri.Method, ri.Path, ri.Handler)
-	}
 
 	// Create server
 	srv := &http.Server{
@@ -143,58 +141,57 @@ func setupServiceRoutes(
 	rateLimiter ratelimit.RateLimiter,
 	log logger.Logger,
 ) {
-	for name, svc := range services {
-		for _, route := range svc.Routes {
-			// Create a handler for this route
-			handler := func(serviceName string, routeConfig config.RouteConfig) gin.HandlerFunc {
-				return func(c *gin.Context) {
-					// Set target service
-					c.Set("target_service", serviceName)
+	// Create a catch-all handler that determines the service from the path
+	group.Any("/*path", func(c *gin.Context) {
+		path := c.Param("path")
+		fullPath := "/api/v1" + path
 
-					// Apply route-specific rate limit if configured
-					if routeConfig.RateLimit != nil {
-						key := fmt.Sprintf("%s:%s:%s", c.ClientIP(), serviceName, c.Request.URL.Path)
-						if !rateLimiter.Allow(key, routeConfig.RateLimit) {
-							c.JSON(http.StatusTooManyRequests, gin.H{
-								"error": "Rate limit exceeded",
-							})
-							return
-						}
+		// Find which service should handle this request
+		var targetService string
+		var targetRoute *config.RouteConfig
+
+		for name, svc := range services {
+			for _, route := range svc.Routes {
+				// Check if this route matches
+				pathForMatching := strings.TrimPrefix(fullPath, "/api/v1")
+				if strings.HasPrefix(pathForMatching, route.PathPrefix) {
+					if route.Method == "*" || route.Method == c.Request.Method {
+						targetService = name
+						targetRoute = &route
+						break
 					}
-
-					// Proxy the request
-					proxyHandler.HandleProxy(serviceName)(c)
 				}
-			}(name, route)
-
-			// Register the route
-			switch route.Method {
-			case "GET":
-				group.GET(route.PathPrefix, handler)
-				group.GET(route.PathPrefix+"/*path", handler)
-			case "POST":
-				group.POST(route.PathPrefix, handler)
-				group.POST(route.PathPrefix+"/*path", handler)
-			case "PUT":
-				group.PUT(route.PathPrefix, handler)
-				group.PUT(route.PathPrefix+"/*path", handler)
-			case "PATCH":
-				group.PATCH(route.PathPrefix, handler)
-				group.PATCH(route.PathPrefix+"/*path", handler)
-			case "DELETE":
-				group.DELETE(route.PathPrefix, handler)
-				group.DELETE(route.PathPrefix+"/*path", handler)
-			case "*":
-				group.Any(route.PathPrefix+"/*path", handler)
 			}
-
-			log.WithFields(map[string]interface{}{
-				"service": name,
-				"method":  route.Method,
-				"path":    route.PathPrefix,
-			}).Debug("Route registered")
+			if targetService != "" {
+				break
+			}
 		}
-	}
+
+		if targetService == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No service found for path"})
+			return
+		}
+
+		// Set target service
+		c.Set("target_service", targetService)
+
+		// Apply route-specific rate limit if configured
+		if targetRoute.RateLimit != nil {
+			key := fmt.Sprintf("%s:%s:%s", c.ClientIP(), targetService, fullPath)
+			if !rateLimiter.Allow(key, targetRoute.RateLimit) {
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error": "Rate limit exceeded",
+				})
+				return
+			}
+		}
+
+		// Fix the request path to include the full path
+		c.Request.URL.Path = fullPath
+
+		// Proxy the request
+		proxyHandler.HandleProxy(targetService)(c)
+	})
 }
 
 func handleHealth(sd discovery.ServiceDiscovery) gin.HandlerFunc {

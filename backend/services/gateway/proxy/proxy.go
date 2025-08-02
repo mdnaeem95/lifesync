@@ -53,36 +53,36 @@ func (ph *ProxyHandler) createProxy(name string, svc config.ServiceConfig) error
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 
-		// Add custom headers (defensive)
+		// Add custom headers
 		req.Header.Set("X-Forwarded-Service", name)
 
-		// Safely inject request_id
-		if v := req.Context().Value("request_id"); v != nil {
-			if reqID, ok := v.(string); ok && reqID != "" {
-				req.Header.Set("X-Gateway-Request-ID", reqID)
-			}
+		// Add request ID if present
+		if requestID := req.Context().Value("request_id"); requestID != nil {
+			req.Header.Set("X-Gateway-Request-ID", requestID.(string))
 		}
 
-		// Forward user information if available (defensive)
+		// Forward user information if available
 		if userID := req.Context().Value("user_id"); userID != nil {
-			if s, ok := userID.(string); ok && s != "" {
-				req.Header.Set("X-User-ID", s)
-			}
+			req.Header.Set("X-User-ID", userID.(string))
 		}
 		if userEmail := req.Context().Value("user_email"); userEmail != nil {
-			if s, ok := userEmail.(string); ok && s != "" {
-				req.Header.Set("X-User-Email", s)
-			}
+			req.Header.Set("X-User-Email", userEmail.(string))
 		}
 	}
 
 	// Custom error handler
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
-		ph.log.WithError(err).WithFields(map[string]interface{}{
-			"service":    name,
-			"path":       req.URL.Path,
-			"request_id": req.Context().Value("request_id"),
-		}).Error("Proxy error")
+		logFields := map[string]interface{}{
+			"service": name,
+			"path":    req.URL.Path,
+		}
+
+		// Add request ID if present
+		if requestID := req.Context().Value("request_id"); requestID != nil {
+			logFields["request_id"] = requestID
+		}
+
+		ph.log.WithError(err).WithFields(logFields).Error("Proxy error")
 
 		rw.WriteHeader(http.StatusBadGateway)
 		rw.Write([]byte(`{"error": "Service temporarily unavailable"}`))
@@ -95,11 +95,17 @@ func (ph *ProxyHandler) createProxy(name string, svc config.ServiceConfig) error
 		resp.Header.Set("X-Service-Name", name)
 
 		// Log response
-		ph.log.WithFields(map[string]interface{}{
+		logFields := map[string]interface{}{
 			"service":     name,
 			"status_code": resp.StatusCode,
-			"request_id":  resp.Request.Context().Value("request_id"),
-		}).Debug("Proxied response")
+		}
+
+		// Add request ID if present
+		if requestID := resp.Request.Context().Value("request_id"); requestID != nil {
+			logFields["request_id"] = requestID
+		}
+
+		ph.log.WithFields(logFields).Debug("Proxied response")
 
 		return nil
 	}
@@ -110,7 +116,13 @@ func (ph *ProxyHandler) createProxy(name string, svc config.ServiceConfig) error
 
 func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get healthy service instance
+		ph.log.WithFields(map[string]interface{}{
+			"service": serviceName,
+			"method":  c.Request.Method,
+			"path":    c.Request.URL.Path,
+		}).Debug("HandleProxy called")
+
+		// Get healthy service
 		service, err := ph.serviceDiscovery.GetHealthyService(serviceName)
 		if err != nil {
 			ph.log.WithError(err).WithField("service", serviceName).Error("No healthy service available")
@@ -121,7 +133,7 @@ func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 			return
 		}
 
-		// Get the reverse proxy
+		// Get the proxy
 		proxy, exists := ph.proxies[serviceName]
 		if !exists {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -130,51 +142,79 @@ func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 			return
 		}
 
-		// Debug: Print what is being matched
-		fmt.Printf("[DEBUG] HandleProxy: service=%s, method=%s, path=%s\n", serviceName, c.Request.Method, c.Request.URL.Path)
-
-		// Find matching route in config
+		// Find matching route
 		route := ph.findMatchingRoute(service, c.Request.Method, c.Request.URL.Path)
 		if route == nil {
-			fmt.Printf("[DEBUG] No matching route for service=%s, method=%s, path=%s\n", serviceName, c.Request.Method, c.Request.URL.Path)
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "Route not found",
 			})
 			return
 		}
 
-		fmt.Printf("[DEBUG] Matched route: %+v\n", *route)
-
-		// Manipulate the request path if needed
+		// Store original path for logging
 		originalPath := c.Request.URL.Path
-		if route.TargetPath != "" {
-			// Swap the matching PathPrefix with TargetPath (only the prefix)
-			c.Request.URL.Path = strings.Replace(c.Request.URL.Path, route.PathPrefix, route.TargetPath, 1)
-		} else if service.StripPrefix {
-			// Remove the PathPrefix from the request path
-			c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, route.PathPrefix)
-		}
-		fmt.Printf("[DEBUG] Path rewrite: %s => %s\n", originalPath, c.Request.URL.Path)
 
-		// Set timeout for this request (if configured)
+		// Modify request path based on configuration
+		if route.TargetPath != "" {
+			// Use specific target path
+			c.Request.URL.Path = route.TargetPath
+		} else {
+			// Remove /api/v1 prefix first
+			pathWithoutPrefix := strings.TrimPrefix(c.Request.URL.Path, "/api/v1")
+
+			// For auth service, we don't strip the prefix
+			if service.StripPrefix && route.PathPrefix != "" {
+				c.Request.URL.Path = strings.TrimPrefix(pathWithoutPrefix, route.PathPrefix)
+			} else {
+				c.Request.URL.Path = pathWithoutPrefix
+			}
+		}
+
+		ph.log.WithFields(map[string]interface{}{
+			"service":        serviceName,
+			"original_path":  originalPath,
+			"rewritten_path": c.Request.URL.Path,
+		}).Debug("Path rewrite")
+
+		// Set timeout for this specific request
 		timeout := route.Timeout
 		if timeout == 0 {
 			timeout = service.Timeout
 		}
-		if timeout > 0 {
-			ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
-			defer cancel()
-			c.Request = c.Request.WithContext(ctx)
+
+		// Create new request with Gin context values
+		ctx := c.Request.Context()
+
+		// Copy Gin context values to request context
+		if requestID, exists := c.Get("request_id"); exists {
+			ctx = context.WithValue(ctx, "request_id", requestID)
+		}
+		if userID, exists := c.Get("user_id"); exists {
+			ctx = context.WithValue(ctx, "user_id", userID)
+		}
+		if userEmail, exists := c.Get("user_email"); exists {
+			ctx = context.WithValue(ctx, "user_email", userEmail)
 		}
 
-		// Add retry logic (if configured)
+		// Apply timeout if configured
+		if timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+
+		c.Request = c.Request.WithContext(ctx)
+
+		// Add retry logic
+		var lastErr error
 		retryCount := service.RetryCount
-		if retryCount <= 0 {
+		if retryCount == 0 {
 			retryCount = 1
 		}
-		var lastErr error
+
 		for i := 0; i < retryCount; i++ {
 			if i > 0 {
+				// Wait before retry
 				time.Sleep(time.Duration(i) * 100 * time.Millisecond)
 				ph.log.WithFields(map[string]interface{}{
 					"service": serviceName,
@@ -182,16 +222,18 @@ func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 				}).Debug("Retrying request")
 			}
 
+			// Create a response writer wrapper to capture the response
 			writer := &responseWriter{
 				ResponseWriter: c.Writer,
 				statusCode:     http.StatusOK,
 			}
 
-			// Actually proxy the request!
+			// Proxy the request
 			proxy.ServeHTTP(writer, c.Request)
 
-			// If we didn't get a 5xx, stop retrying
+			// Check if we need to retry
 			if writer.statusCode < 500 {
+				// Success or client error, don't retry
 				return
 			}
 
@@ -207,22 +249,17 @@ func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 }
 
 func (ph *ProxyHandler) findMatchingRoute(service *config.ServiceConfig, method, path string) *config.RouteConfig {
-	// Always strip the /api/v1 prefix if present
-	const apiPrefix = "/api/v1"
-	if strings.HasPrefix(path, apiPrefix) {
-		path = strings.TrimPrefix(path, apiPrefix)
-		// Make sure path still starts with '/' after trim
-		if !strings.HasPrefix(path, "/") && len(path) > 0 {
-			path = "/" + path
-		}
-	}
+	// Remove /api/v1 prefix for matching
+	pathForMatching := strings.TrimPrefix(path, "/api/v1")
+
 	for _, route := range service.Routes {
 		// Check method
 		if route.Method != "*" && route.Method != method {
 			continue
 		}
+
 		// Check path prefix
-		if strings.HasPrefix(path, route.PathPrefix) {
+		if strings.HasPrefix(pathForMatching, route.PathPrefix) {
 			return &route
 		}
 	}
