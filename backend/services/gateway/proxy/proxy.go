@@ -159,14 +159,19 @@ func (ph *ProxyHandler) HandleProxy(serviceName string) gin.HandlerFunc {
 			// Use specific target path
 			c.Request.URL.Path = route.TargetPath
 		} else {
-			// Remove /api/v1 prefix first
-			pathWithoutPrefix := strings.TrimPrefix(c.Request.URL.Path, "/api/v1")
-
-			// For auth service, we don't strip the prefix
-			if service.StripPrefix && route.PathPrefix != "" {
-				c.Request.URL.Path = strings.TrimPrefix(pathWithoutPrefix, route.PathPrefix)
+			// For flowtime service, don't strip the /api/v1 prefix since it expects it
+			if serviceName == "flowtime" {
+				// FlowTime expects /api/v1/* paths, so keep them as is
+				c.Request.URL.Path = originalPath
 			} else {
-				c.Request.URL.Path = pathWithoutPrefix
+				// For other services (like auth), remove /api/v1 prefix
+				pathWithoutPrefix := strings.TrimPrefix(originalPath, "/api/v1")
+
+				if service.StripPrefix && route.PathPrefix != "" {
+					c.Request.URL.Path = strings.TrimPrefix(pathWithoutPrefix, route.PathPrefix)
+				} else {
+					c.Request.URL.Path = pathWithoutPrefix
+				}
 			}
 		}
 

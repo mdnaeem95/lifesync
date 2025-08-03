@@ -135,7 +135,7 @@ func setupRouter(
 	})
 
 	// API routes - all require authentication
-	api := router.Group("/api")
+	api := router.Group("/api/v1")
 	api.Use(middleware.AuthRequired(jwtService))
 	{
 		// Task routes

@@ -247,7 +247,7 @@ func loadConfig() config.GatewayConfig {
 					{
 						Method:       "*",
 						PathPrefix:   "/auth",
-						TargetPath:   "/auth",
+						TargetPath:   "",
 						RequiresAuth: false,
 					},
 				},
@@ -258,7 +258,7 @@ func loadConfig() config.GatewayConfig {
 				HealthCheckPath: "/health",
 				Timeout:         5 * time.Second,
 				RetryCount:      2,
-				StripPrefix:     true,
+				StripPrefix:     false,
 				RequiresAuth:    true,
 				Routes: []config.RouteConfig{
 					{Method: "*", PathPrefix: "/tasks", RequiresAuth: true},
